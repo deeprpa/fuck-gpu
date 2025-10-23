@@ -1,2 +1,5 @@
-# gpu-supervisor
-GPU 服务调度
+# Fuck-GPU
+
+Squeeze GPU resources through multi-instance deployment.
+
+
