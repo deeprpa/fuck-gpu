@@ -2,8 +2,10 @@ package logs
 
 import (
 	"context"
+	"fmt"
 	"os"
 
+	"github.com/deeprpa/fuck-gpu/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -141,4 +143,21 @@ func SetLevel(lvl zapcore.Level) {
 		zapcore.Lock(os.Stdout),
 		zap.NewAtomicLevelAt(lvl)))
 	logger = zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1)).Sugar()
+}
+
+func InitLoggerConfig(lcfg config.LogConfig) {
+	edr := zapcore.NewJSONEncoder(stdcfg)
+	lvl := zap.NewAtomicLevelAt(lcfg.Level)
+	var syncer zapcore.WriteSyncer
+	switch lcfg.Writer {
+	case "file":
+		syncer = zapcore.AddSync(lcfg.Logger)
+	case "console", "stdout", "":
+		syncer = zapcore.Lock(os.Stdout)
+	default:
+		panic(fmt.Errorf("unsupport logger writer (%s)", lcfg.Encoder))
+	}
+	core := zapcore.NewCore(edr, syncer, lvl)
+	opts := []zap.Option{zap.AddCaller(), zap.AddCallerSkip(1)}
+	logger = zap.New(core, opts...).Sugar()
 }
