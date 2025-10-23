@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,16 +14,15 @@ import (
 
 	"github.com/Masterminds/semver"
 	"github.com/deeprpa/fuck-gpu/config"
-	"github.com/sirupsen/logrus"
+	"github.com/deeprpa/fuck-gpu/pkgs/logs"
 )
 
 type Command struct {
 	appName string
+	ctx     context.Context
 	cfg     config.CommandConfig
 
-	cmd *exec.Cmd
-
-	log     *logrus.Entry
+	cmd     *exec.Cmd
 	errExit chan error
 
 	firstStartedAt *time.Time
@@ -42,14 +42,14 @@ func (c *Command) checkProcessStatus() {
 		select {
 		case <-tc.C:
 			if c.cmd == nil || c.cmd.Process == nil {
-				c.log.Debugf("command status NIL")
+				logs.DebugContextf(c.ctx, "command status NIL")
 				tc.Reset(tickWait)
 				continue
 			}
 
 			_, err := os.FindProcess(c.cmd.Process.Pid)
 			if err != nil {
-				c.log.Warnf("got process(%v) failed, %s", c.cmd.Process.Pid, err)
+				logs.WarnContextf(c.ctx, "got process(%v) failed, %s", c.cmd.Process.Pid, err)
 			}
 
 			if c.cmd.ProcessState == nil {
@@ -57,14 +57,14 @@ func (c *Command) checkProcessStatus() {
 					if c.retryTimes > 1 {
 						c.retryTimes = 1
 					}
-					c.log.Debugf("command(%v) status RUNING", c.cmd.Process.Pid)
+					logs.DebugContextf(c.ctx, "command(%v) status RUNING", c.cmd.Process.Pid)
 				} else {
-					c.log.Debugf("command status UNKNOWN")
+					logs.DebugContextf(c.ctx, "command status UNKNOWN")
 				}
 				tc.Reset(tickWait)
 				continue
 			}
-			c.log.Debugf("command(%v) is exited: %v", c.cmd.Process.Pid, c.cmd.ProcessState.Exited())
+			logs.DebugContextf(c.ctx, "command(%v) is exited: %v", c.cmd.Process.Pid, c.cmd.ProcessState.Exited())
 			if c.cmd.ProcessState.Exited() && c.readyExitAt == nil {
 				c.restart()
 			}
@@ -73,15 +73,15 @@ func (c *Command) checkProcessStatus() {
 		case exErr := <-c.errExit:
 
 			if c.readyExitAt == nil {
-				c.log.Infof("command(%v) exited, %s", c.cmd.Process.Pid, exErr)
+				logs.InfoContextf(c.ctx, "command(%v) exited, %s", c.cmd.Process.Pid, exErr)
 				c.restart()
 			} else {
-				c.log.Infof("command(%v) exited, %s", c.cmd.Process.Pid, exErr)
+				logs.InfoContextf(c.ctx, "command(%v) exited, %s", c.cmd.Process.Pid, exErr)
 			}
 			tc.Reset(tickWait)
 
 		case <-c.chExitRoutine:
-			c.log.Debugf("return check process status.")
+			logs.DebugContextf(c.ctx, "return check process status.")
 			return
 		}
 	}
@@ -95,19 +95,19 @@ func (c *Command) Start() error {
 	}
 
 	if err := c.cmd.Start(); err != nil {
-		c.log.Errorf("start %v failed, %s", c.cmd, err)
+		logs.ErrorContextf(c.ctx, "start %v failed, %s", c.cmd, err)
 		return err
 	}
 	go c.waitProcessExit()
 	go c.checkProcessStatus()
-	c.log.Debug("starting, ", c.cmd.Process.Pid)
+	logs.DebugContextf(c.ctx, "starting, ", c.cmd.Process.Pid)
 
 	return nil
 }
 
 func (c *Command) restart() error {
 	waitTime := time.Second * c.retryTimes * 2
-	c.log.Infof("restarting later %s", waitTime)
+	logs.InfoContextf(c.ctx, "restarting later %s", waitTime)
 	time.Sleep(waitTime)
 	if c.cmd.Process != nil {
 		c.waitProcess(c.cmd.Process.Pid)
@@ -119,11 +119,11 @@ func (c *Command) restart() error {
 	}
 	c.retryTimes++
 	if err := c.cmd.Start(); err != nil {
-		c.log.Errorf("start %v failed, %s", c.cmd, err)
+		logs.ErrorContextf(c.ctx, "start %v failed, %s", c.cmd, err)
 		return err
 	}
 	go c.waitProcessExit()
-	c.log.Debug("restarting, ", c.cmd.Process.Pid)
+	logs.DebugContextf(c.ctx, "restarting, ", c.cmd.Process.Pid)
 	return nil
 }
 
@@ -131,7 +131,7 @@ func (c *Command) waitProcessExit() {
 	err := c.cmd.Wait()
 	if err != nil && c.errExit != nil {
 		c.errExit <- err
-		c.log.Errorf("pcocess exit. %s", err)
+		logs.ErrorContextf(c.ctx, "pcocess exit. %s", err)
 		return
 	}
 }
@@ -154,7 +154,7 @@ func (c *Command) ReadyToExit() error {
 func (c *Command) Exit() error {
 	if c.cmd != nil && c.cmd.Process != nil {
 		if err := c.cmd.Process.Kill(); err != nil {
-			c.log.Errorf("exited command failed, %s", err)
+			logs.ErrorContextf(c.ctx, "exited command failed, %s", err)
 		}
 		c.waitProcess(c.cmd.Process.Pid)
 	}
@@ -178,7 +178,7 @@ func (c *Command) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, error) {
 	case "http", "https":
 		execPath, err := c.downloadCommand(cmdCfg.Path)
 		if err != nil {
-			c.log.Errorf("got remote exec failed, %s", err)
+			logs.ErrorContextf(c.ctx, "got remote exec failed, %s", err)
 			return nil, err
 		}
 		cmd = exec.Command(execPath, cmdCfg.Args...)
@@ -204,7 +204,7 @@ func (c *Command) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, error) {
 }
 
 func (c *Command) downloadCommand(path string) (string, error) {
-	c.log.Debugf("start download %s", path)
+	logs.DebugContextf(c.ctx, "start download %s", path)
 
 	u, err := url.Parse(path)
 	if err != nil {
@@ -239,7 +239,7 @@ func (c *Command) downloadCommand(path string) (string, error) {
 		return "", fmt.Errorf("chmod exec file failed, %s", err)
 	}
 
-	c.log.Infof("downlaod exec successful, %s", execPath)
+	logs.InfoContextf(c.ctx, "downlaod exec successful, %s", execPath)
 	return execPath, nil
 }
 
@@ -263,14 +263,14 @@ func (c *Command) getCommandVersion() (*semver.Version, error) {
 	cmd := exec.Command(c.cmd.Path, c.cfg.VerArgs...)
 	bs, err := cmd.CombinedOutput()
 	if err != nil {
-		c.log.Errorf("get command (%v) version failed, %s", cmd.Path, err)
+		logs.ErrorContextf(c.ctx, "get command (%v) version failed, %s", cmd.Path, err)
 		return nil, err
 	}
-	c.log.Debugf("get command (%v) version failed, %s", cmd.Path, bs)
+	logs.DebugContextf(c.ctx, "get command (%v) version failed, %s", cmd.Path, bs)
 	verStr := strings.TrimPrefix(strings.TrimSpace(string(bs)), "v")
 	v, err := semver.NewVersion(verStr)
 	if err != nil {
-		c.log.Errorf("got command version(%s) failed, %s", bs, err)
+		logs.ErrorContextf(c.ctx, "got command version(%s) failed, %s", bs, err)
 		return nil, err
 	}
 	c.localVer = v
@@ -284,8 +284,8 @@ func (c *Command) waitProcess(pid int) {
 	}
 	st, err := p.Wait()
 	if err != nil {
-		c.log.Errorf("wait exit failed, %s, %v", err, st)
+		logs.ErrorContextf(c.ctx, "wait exit failed, %s, %v", err, st)
 	}
-	c.log.Errorf("exit %v", st)
+	logs.ErrorContextf(c.ctx, "exit %v", st)
 	return
 }

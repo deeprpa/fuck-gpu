@@ -19,28 +19,12 @@ func ListenAndServe(l net.Listener, d *daemon.Daemon) {
 	router.GET("status", func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, d.Status())
 	})
-	router.GET("stop_upgrader", func(ctx *gin.Context) {
-		d.App().StopUpgrader()
-		ctx.Writer.WriteHeader(http.StatusNoContent)
-	})
-	router.GET("start_upgrader", func(ctx *gin.Context) {
-		d.App().StartUpgrader()
-		ctx.Writer.WriteHeader(http.StatusNoContent)
-	})
 	router.GET("exit_spare", func(ctx *gin.Context) {
 		d.App().ExitSpare()
 		ctx.Writer.WriteHeader(http.StatusNoContent)
 	})
 	router.GET("restart", func(ctx *gin.Context) {
 		if err := d.App().Restart(); err != nil {
-			ctx.Writer.WriteString(err.Error())
-			ctx.Writer.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		ctx.Writer.WriteHeader(http.StatusNoContent)
-	})
-	router.GET("upgrade", func(ctx *gin.Context) {
-		if err := d.App().Upgrade(); err != nil {
 			ctx.Writer.WriteString(err.Error())
 			ctx.Writer.WriteHeader(http.StatusInternalServerError)
 			return

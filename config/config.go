@@ -49,7 +49,14 @@ type CommandConfig struct {
 	Envs    map[string]interface{} `yaml:"envs"`
 }
 
-type HealthCheck struct {
+type ResourceQuota struct {
+	Require Resource `yaml:"require"`
+	// Limit   Resource `yaml:"limit"`
+}
+
+// Resource 资源
+type Resource struct {
+	GPUMemory MemorySize `yaml:"gpu_memory"`
 }
 
 func LoadConfig(file string) (*GlobalConfig, error) {

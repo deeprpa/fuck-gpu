@@ -31,7 +31,7 @@ func NewDaemon(lc *lifecycle.LifeCycle, cfg *config.GlobalConfig) (*Daemon, erro
 		if appCfg.TmpDir == "" {
 			appCfg.TmpDir = filepath.Join(cfg.TmpDir, appCfg.Name)
 		}
-		app, err := NewApp(appCfg)
+		app, err := NewApp(lc.Context(), appCfg)
 		if err != nil {
 			return nil, err
 		}
@@ -52,10 +52,9 @@ type DaemonStatus struct {
 	Apps []*AppStatus `json:"apps"`
 }
 type AppStatus struct {
-	Name       string
-	RuningItem string
-	Version    string
-	StartedAt  string
+	Name      string
+	Version   string
+	StartedAt string
 
 	Main  CmdStatus
 	Spare *CmdStatus
@@ -78,14 +77,10 @@ func (d *Daemon) Status() *DaemonStatus {
 
 	for _, app := range d.apps {
 		ast := &AppStatus{
-			Name:       app.cfg.Name,
-			RuningItem: app.runingItem.String(),
-			StartedAt:  app.startAt.String(),
+			Name:      app.cfg.Name,
+			StartedAt: app.startAt.String(),
 		}
-		if app.localVer != nil {
-			ast.Version = app.localVer.String()
-		}
-		if cmd := app.runningCommand(); cmd != nil {
+		if cmd := app.cmd; cmd != nil {
 			if cmd.startedAt != nil {
 				ast.Main.StartedAt = cmd.startedAt.String()
 			}
@@ -103,7 +98,7 @@ func (d *Daemon) Status() *DaemonStatus {
 				}
 			}
 		}
-		if cmd := app.command(app.runingItem.Adverse()); cmd != nil {
+		if cmd := app.cmd; cmd != nil {
 			ast.Spare = &CmdStatus{}
 			if cmd.startedAt != nil {
 				ast.Spare.StartedAt = cmd.startedAt.String()

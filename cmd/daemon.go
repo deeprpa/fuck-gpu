@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
 	"net"
 
 	"github.com/deeprpa/fuck-gpu/internal/api"
@@ -22,13 +20,7 @@ func daemonCmd() *cobra.Command {
 		Aliases: []string{"d"},
 		Short:   "start daemon",
 		PreRunE: loadConfigCmd,
-		Run: func(ctx *cobra.Command, args []string) {
-			{
-				buf := new(bytes.Buffer)
-				json.NewEncoder(buf).Encode(cfg)
-				logrus.Debugf("config %s", buf.String())
-			}
-
+		Run: func(cmd *cobra.Command, args []string) {
 			lc := lifecycle.New()
 			d, err := daemon.NewDaemon(lc, cfg)
 			if err != nil {
