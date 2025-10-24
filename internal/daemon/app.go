@@ -2,8 +2,6 @@ package daemon
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"time"
 
 	"github.com/deeprpa/fuck-gpu/config"
@@ -38,12 +36,6 @@ func NewApp(ictx context.Context, cfg *config.AppConfig) (*App, error) {
 }
 
 func (a *App) NewCommand(cfg config.CommandConfig) (*Command, error) {
-	cfg.TmpDir = a.cfg.TmpDir
-	err := os.MkdirAll(cfg.TmpDir, 0755)
-	if err != nil {
-		return nil, fmt.Errorf("mkdir tmpdir %v failed, %s", cfg.TmpDir, err)
-	}
-
 	c := &Command{
 		appName:       a.cfg.Name,
 		cfg:           cfg,

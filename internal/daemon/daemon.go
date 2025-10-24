@@ -3,12 +3,12 @@ package daemon
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/deeprpa/fuck-gpu/config"
 	"github.com/ygpkg/yg-go/lifecycle"
 )
 
+// Daemon background daemon
 type Daemon struct {
 	cfg *config.GlobalConfig
 	lc  *lifecycle.LifeCycle
@@ -16,6 +16,7 @@ type Daemon struct {
 	apps []*App
 }
 
+// NewDaemon Create a new daemon instance
 func NewDaemon(lc *lifecycle.LifeCycle, cfg *config.GlobalConfig) (*Daemon, error) {
 	d := &Daemon{
 		cfg:  cfg,
@@ -28,9 +29,6 @@ func NewDaemon(lc *lifecycle.LifeCycle, cfg *config.GlobalConfig) (*Daemon, erro
 	}
 
 	for _, appCfg := range d.cfg.Apps {
-		if appCfg.TmpDir == "" {
-			appCfg.TmpDir = filepath.Join(cfg.TmpDir, appCfg.Name)
-		}
 		app, err := NewApp(lc.Context(), appCfg)
 		if err != nil {
 			return nil, err
@@ -56,8 +54,7 @@ type AppStatus struct {
 	Version   string
 	StartedAt string
 
-	Main  CmdStatus
-	Spare *CmdStatus
+	Main CmdStatus
 }
 
 type CmdStatus struct {
@@ -98,28 +95,7 @@ func (d *Daemon) Status() *DaemonStatus {
 				}
 			}
 		}
-		if cmd := app.cmd; cmd != nil {
-			ast.Spare = &CmdStatus{}
-			if cmd.startedAt != nil {
-				ast.Spare.StartedAt = cmd.startedAt.String()
-			}
-			if cmd.firstStartedAt != nil {
-				ast.Spare.FirstStartedAt = cmd.firstStartedAt.String()
-			}
-			if cmd.localVer != nil {
-				ast.Spare.Version = cmd.localVer.String()
-			}
-			if cmd.readyExitAt != nil {
-				ast.Spare.ReadyToExitAt = cmd.readyExitAt.String()
-			}
-			ast.Spare.RetryTimes = int(cmd.retryTimes)
-			if cc := cmd.cmd; cc != nil {
-				ast.Spare.Path = cc.Path
-				if cc.Process != nil {
-					ast.Spare.Pid = cc.Process.Pid
-				}
-			}
-		}
+
 		sts.Apps = append(sts.Apps, ast)
 	}
 
@@ -131,4 +107,9 @@ func (d *Daemon) App() *App {
 		return nil
 	}
 	return d.apps[0]
+}
+
+// Schedule 调度
+func (d *Daemon) Schedule() error {
+	return nil
 }

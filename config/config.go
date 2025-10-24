@@ -29,20 +29,12 @@ type LogConfig struct {
 
 type AppConfig struct {
 	Name    string        `yaml:"name"`
-	TmpDir  string        `yaml:"tmp_dir"`
 	Command CommandConfig `yaml:"command"`
 	Restart string        `yaml:"restart"`
 }
 
-type CommandFile struct {
-	Mode string `yaml:"mode"`
-	Path string `yaml:"path"`
-}
-
 type CommandConfig struct {
-	CommandFile `yaml:",inline"`
-
-	TmpDir  string                 `yaml:"-"`
+	Command string                 `yaml:"command"`
 	WorkDir string                 `yaml:"workdir"`
 	Args    []string               `yaml:"args"`
 	VerArgs []string               `yaml:"ver_args"`

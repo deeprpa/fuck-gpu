@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/deeprpa/fuck-gpu/pkgs/gpucollect"
 	"github.com/spf13/cobra"
 	"github.com/ygpkg/yg-go/logs"
@@ -24,7 +26,7 @@ func gpuCollectCmd() *cobra.Command {
 			}
 
 			for _, gpu := range gpus {
-				logs.InfoContextf(ctx, "gpu %d: %s, total: %s, free: %s, used: %s", gpu.Index, gpu.Name, gpu.MemoryTotal, gpu.MemoryFree, gpu.MemoryUsed)
+				fmt.Printf("gpu %d: %s, total: %s, free: %s, used: %s\n", gpu.Index, gpu.Name, gpu.MemoryTotal, gpu.MemoryFree, gpu.MemoryUsed)
 			}
 
 		},

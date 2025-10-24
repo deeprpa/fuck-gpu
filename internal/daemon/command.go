@@ -3,13 +3,8 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/Masterminds/semver"
@@ -167,26 +162,7 @@ func (c *Command) Exit() error {
 }
 
 func (c *Command) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, error) {
-	if strings.HasPrefix(cmdCfg.Path, "http") || strings.HasPrefix(cmdCfg.Path, "https") {
-		cmdCfg.Mode = "http"
-	}
-	var cmd *exec.Cmd
-	switch cmdCfg.Mode {
-	case "", "local":
-		cmd = exec.Command(cmdCfg.Path, cmdCfg.Args...)
-
-	case "http", "https":
-		execPath, err := c.downloadCommand(cmdCfg.Path)
-		if err != nil {
-			logs.ErrorContextf(c.ctx, "got remote exec failed, %s", err)
-			return nil, err
-		}
-		cmd = exec.Command(execPath, cmdCfg.Args...)
-
-	default:
-		return nil, fmt.Errorf("not support command mode %s", cmdCfg.Mode)
-	}
-
+	cmd := exec.Command(cmdCfg.Command, cmdCfg.Args...)
 	if cmdCfg.WorkDir != "" {
 		cmd.Dir = cmdCfg.WorkDir
 	}
@@ -201,80 +177,6 @@ func (c *Command) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, error) {
 	cmd.Stderr = os.Stdout
 	// cmd.Stdout = os.Stdout
 	return cmd, nil
-}
-
-func (c *Command) downloadCommand(path string) (string, error) {
-	logs.DebugContextf(c.ctx, "start download %s", path)
-
-	u, err := url.Parse(path)
-	if err != nil {
-		return "", fmt.Errorf("parse exec url %v failed, %s", path, err)
-	}
-
-	resp, err := http.Get(u.String())
-	if err != nil {
-		return "", fmt.Errorf("download exec file %v failed, %s", u.String(), err)
-	}
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("downlaod file %v wrong status code %e", u.String(), resp.Status)
-	}
-
-	execName := fmt.Sprintf("%s-%s", c.appName, time.Now().Format("20060102T150405"))
-	execPath := filepath.Join(c.cfg.TmpDir, "bin", execName)
-	if err := c.checkOrCreateDir("bin"); err != nil {
-		return "", err
-	}
-	f, err := os.Create(execPath)
-	if err != nil {
-		return execPath, fmt.Errorf("create tmp exec file %v failed, %s", execPath, err)
-	}
-	defer f.Close()
-
-	_, err = io.Copy(f, resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("write exec file failed, %s", err)
-	}
-
-	if err := os.Chmod(execPath, 0755); err != nil {
-		return "", fmt.Errorf("chmod exec file failed, %s", err)
-	}
-
-	logs.InfoContextf(c.ctx, "downlaod exec successful, %s", execPath)
-	return execPath, nil
-}
-
-func (c *Command) checkOrCreateDir(subPath string) error {
-	dirPath := c.cfg.TmpDir
-	if subPath != "" {
-		dirPath = filepath.Join(c.cfg.TmpDir, subPath)
-	}
-
-	err := os.MkdirAll(dirPath, 0755)
-	if err != nil {
-		return fmt.Errorf("mkdir %v failed, %s", dirPath, err)
-	}
-	return nil
-}
-
-func (c *Command) getCommandVersion() (*semver.Version, error) {
-	if c.localVer != nil {
-		return c.localVer, nil
-	}
-	cmd := exec.Command(c.cmd.Path, c.cfg.VerArgs...)
-	bs, err := cmd.CombinedOutput()
-	if err != nil {
-		logs.ErrorContextf(c.ctx, "get command (%v) version failed, %s", cmd.Path, err)
-		return nil, err
-	}
-	logs.DebugContextf(c.ctx, "get command (%v) version failed, %s", cmd.Path, bs)
-	verStr := strings.TrimPrefix(strings.TrimSpace(string(bs)), "v")
-	v, err := semver.NewVersion(verStr)
-	if err != nil {
-		logs.ErrorContextf(c.ctx, "got command version(%s) failed, %s", bs, err)
-		return nil, err
-	}
-	c.localVer = v
-	return v, nil
 }
 
 func (c *Command) waitProcess(pid int) {
