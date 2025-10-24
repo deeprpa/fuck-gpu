@@ -18,9 +18,9 @@ var (
 	rootCmd = &cobra.Command{
 		Use:   "fuck-gpu",
 		Short: "fuck-gpu",
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			loadConfigCmd(cmd, args)
-		},
+		// PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// 	loadConfigCmd(cmd, args)
+		// },
 		Run: func(cmd *cobra.Command, args []string) {
 			if showVer {
 				printVersion()

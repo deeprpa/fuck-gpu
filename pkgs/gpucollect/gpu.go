@@ -6,22 +6,25 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/deeprpa/fuck-gpu/config"
 )
 
 // GPUInfo 保存单张显卡的信息
 type GPUInfo struct {
-	Index         int
-	Name          string
-	MemoryTotalMB int
-	MemoryFreeMB  int
-	MemoryUsedMB  int
+	Index       int
+	UUID        string
+	Name        string
+	MemoryTotal config.MemorySize
+	MemoryFree  config.MemorySize
+	MemoryUsed  config.MemorySize
 }
 
 // GetNvidiaGPUMemory 获取当前系统中所有 NVIDIA GPU 的显存信息
 func GetNvidiaGPUMemory() ([]GPUInfo, error) {
 	// 使用 nvidia-smi 查询 GPU 显存信息
 	cmd := exec.Command("nvidia-smi",
-		"--query-gpu=index,name,memory.total,memory.free,memory.used",
+		"--query-gpu=index,uuid,name,memory.total,memory.free,memory.used",
 		"--format=csv,noheader,nounits")
 
 	var out bytes.Buffer
@@ -35,22 +38,23 @@ func GetNvidiaGPUMemory() ([]GPUInfo, error) {
 
 	for _, line := range lines {
 		fields := strings.Split(strings.TrimSpace(line), ", ")
-		if len(fields) != 5 {
+		if len(fields) != 6 {
 			continue
 		}
 
 		index, _ := strconv.Atoi(fields[0])
 		name := fields[1]
-		total, _ := strconv.Atoi(fields[2])
-		free, _ := strconv.Atoi(fields[3])
-		used, _ := strconv.Atoi(fields[4])
+		total, _ := strconv.Atoi(fields[3])
+		free, _ := strconv.Atoi(fields[4])
+		used, _ := strconv.Atoi(fields[5])
 
 		gpus = append(gpus, GPUInfo{
-			Index:         index,
-			Name:          name,
-			MemoryTotalMB: total,
-			MemoryFreeMB:  free,
-			MemoryUsedMB:  used,
+			Index:       index,
+			UUID:        fields[1],
+			Name:        name,
+			MemoryTotal: config.NewMemorySize(fmt.Sprintf("%vM", total)),
+			MemoryFree:  config.NewMemorySize(fmt.Sprintf("%vM", free)),
+			MemoryUsed:  config.NewMemorySize(fmt.Sprintf("%vM", used)),
 		})
 	}
 
