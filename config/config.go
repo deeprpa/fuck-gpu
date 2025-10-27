@@ -14,11 +14,13 @@ type GlobalConfig struct {
 
 	TmpDir string       `yaml:"tmp_dir"`
 	Apps   []*AppConfig `yaml:"apps"`
+	// AllocatableResource 可分配资源
+	AllocatableResource ResourceQuota `yaml:"allocatable"`
 }
 
 // LogConfig 。
 type LogConfig struct {
-	// Writer 日志输出位置 console/file/workwx
+	// Writer 日志输出位置 console/file
 	Writer string `yaml:"writer"`
 	// Encoder 编码格式
 	Encoder string        `yaml:"encoder"`
@@ -27,28 +29,49 @@ type LogConfig struct {
 	*lumberjack.Logger `yaml:",inline"`
 }
 
+// AppConfig 应用配置
 type AppConfig struct {
 	Name    string        `yaml:"name"`
 	Command CommandConfig `yaml:"command"`
 	Restart string        `yaml:"restart"`
 }
 
+// CommandConfig 命令配置
 type CommandConfig struct {
-	Command string                 `yaml:"command"`
-	WorkDir string                 `yaml:"workdir"`
-	Args    []string               `yaml:"args"`
-	VerArgs []string               `yaml:"ver_args"`
-	Envs    map[string]interface{} `yaml:"envs"`
+	Command string            `yaml:"command"`
+	WorkDir string            `yaml:"workdir"`
+	Args    []string          `yaml:"args"`
+	VerArgs []string          `yaml:"ver_args"`
+	Envs    map[string]string `yaml:"envs"`
 }
 
+// ResourceQuota 资源配额
 type ResourceQuota struct {
+	// Require 资源需求
 	Require Resource `yaml:"require"`
 	// Limit   Resource `yaml:"limit"`
+}
+
+// ReplicaPolicy 副本策略
+type ReplicaPolicy struct {
+	// Static 静态副本数，0表示不限制
+	Static int `yaml:"static"`
+	// MaxReplicas 最大副本数，0表示不限制
+	MaxReplicas int `yaml:"max_replicas"`
+	// MinReplicas 最小副本数，0表示不限制
+	MinReplicas int `yaml:"min_replicas"`
 }
 
 // Resource 资源
 type Resource struct {
 	GPUMemory MemorySize `yaml:"gpu_memory"`
+}
+
+// AllocatableResource 可分配资源
+type AllocatableResource struct {
+	// Mode 资源获取模式，auto/manual
+	Mode     string
+	Resource `yaml:",inline"`
 }
 
 func LoadConfig(file string) (*GlobalConfig, error) {
