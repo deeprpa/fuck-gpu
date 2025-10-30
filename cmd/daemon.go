@@ -5,10 +5,10 @@ import (
 
 	"github.com/deeprpa/fuck-gpu/internal/api"
 	"github.com/deeprpa/fuck-gpu/internal/daemon"
-	"github.com/deeprpa/fuck-gpu/pkgs/logs"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/ygpkg/yg-go/lifecycle"
+	"github.com/ygpkg/yg-go/logs"
 )
 
 func init() {

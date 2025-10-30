@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/deeprpa/fuck-gpu/config"
-	"github.com/deeprpa/fuck-gpu/pkgs/logs"
 	"github.com/deeprpa/fuck-gpu/version"
 	"github.com/spf13/cobra"
+	"github.com/ygpkg/yg-go/logs"
 )
 
 var (

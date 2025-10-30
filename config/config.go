@@ -1,32 +1,21 @@
 package config
 
 import (
-	"io/ioutil"
+	"os"
 
-	"go.uber.org/zap/zapcore"
-	"gopkg.in/natefinch/lumberjack.v2"
+	"github.com/ygpkg/yg-go/config"
+	"github.com/ygpkg/yg-go/logs"
 	"gopkg.in/yaml.v2"
 )
 
 // GlobalConfig global config
 type GlobalConfig struct {
-	LogConfig *LogConfig `yaml:"log"`
+	LogConfig config.LogConfig `yaml:"log"`
 
 	TmpDir string       `yaml:"tmp_dir"`
 	Apps   []*AppConfig `yaml:"apps"`
 	// AllocatableResource 可分配资源
 	AllocatableResource ResourceQuota `yaml:"allocatable"`
-}
-
-// LogConfig 。
-type LogConfig struct {
-	// Writer 日志输出位置 console/file
-	Writer string `yaml:"writer"`
-	// Encoder 编码格式
-	Encoder string        `yaml:"encoder"`
-	Level   zapcore.Level `yaml:"level"`
-
-	*lumberjack.Logger `yaml:",inline"`
 }
 
 // AppConfig 应用配置
@@ -75,12 +64,14 @@ type AllocatableResource struct {
 }
 
 func LoadConfig(file string) (*GlobalConfig, error) {
-	data, err := ioutil.ReadFile(file)
+	data, err := os.ReadFile(file)
 	if err != nil {
+		logs.ErrorContextf(nil, "read config file %s failed, %s", file, err)
 		return nil, err
 	}
 	cfg := &GlobalConfig{}
 	if err := yaml.Unmarshal(data, cfg); err != nil {
+		logs.ErrorContextf(nil, "unmarshal config file %s failed, %s", file, err)
 		return nil, err
 	}
 	return cfg, nil

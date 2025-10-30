@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/deeprpa/fuck-gpu/config"
-	"github.com/deeprpa/fuck-gpu/pkgs/logs"
+	"github.com/ygpkg/yg-go/logs"
 )
 
 type App struct {
