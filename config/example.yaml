@@ -1,0 +1,26 @@
+logger:
+  default:
+  - writer: console
+    level: debug
+  - writer: file
+    level: debug
+    filename: ./logs/default.log
+    maxsize: 10
+    maxage: 15
+    maxbackups: 5
+    localtime: true
+    compress: true
+
+global:
+
+
+apps:
+- name: llm-qwen3
+  command:
+    workdir: ./
+    command: "sleep"
+    args:
+    - "10"
+    envs:
+    - name: APP_NAME
+      value: sleep_a

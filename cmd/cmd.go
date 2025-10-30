@@ -13,7 +13,7 @@ import (
 var (
 	showVer bool
 	cfgFile string
-	cfg     *config.GlobalConfig
+	cfg     *config.MainConfig
 	ctx     = context.Background()
 	rootCmd = &cobra.Command{
 		Use:   "fuck-gpu",
@@ -45,8 +45,8 @@ func loadConfigCmd(cmd *cobra.Command, args []string) (err error) {
 		logs.ErrorContextf(ctx, "load config file from %s failed, %s", cfgFile, err)
 		return err
 	}
-	if cfg.LogConfig != nil {
-		logs.InitLoggerConfig(*cfg.LogConfig)
+	if cfg.Logger != nil {
+		logs.ReloadConfig("default", cfg.Logger)
 	}
 	return nil
 }

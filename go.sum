@@ -173,6 +173,8 @@ github.com/xen0n/go-workwx v1.7.0 h1:s1kL0h+HlTOYd8IMj+dYK2nWq3jbT8tcwT3Q2Aia+RQ
 github.com/xen0n/go-workwx v1.7.0/go.mod h1:KYJmYpEuEl9EbbsnQE7PO1Z/PH9rIR3epXRKpYIQeJU=
 github.com/ygpkg/yg-go v1.23.32 h1:FQlHnRMsROX0SXHO3x8sAY3hTZ64Bsk4vKg4jELtNMg=
 github.com/ygpkg/yg-go v1.23.32/go.mod h1:2PIa7bMCZEQCKi3qCT68t1Jn6geFCMHYiJ/T1P7J8tQ=
+github.com/ygpkg/yg-go v1.23.34 h1:sTBbfT3qCs2LzPTGZyO2/AKIuxUOK2c/yR7ZqYHYsr8=
+github.com/ygpkg/yg-go v1.23.34/go.mod h1:2PIa7bMCZEQCKi3qCT68t1Jn6geFCMHYiJ/T1P7J8tQ=
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/gopher-lua v0.0.0-20220504180219-658193537a64 h1:5mLPGnFdSsevFRFc9q3yYbBkB6tsm4aCwwQV/j1JQAQ=
 github.com/yuin/gopher-lua v0.0.0-20220504180219-658193537a64/go.mod h1:GBR0iDaNXjAgGg9zfCvksxSRnQx76gclCIb7kdAd1Pw=

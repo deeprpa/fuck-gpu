@@ -5,15 +5,20 @@ import (
 
 	"github.com/ygpkg/yg-go/config"
 	"github.com/ygpkg/yg-go/logs"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
-// GlobalConfig global config
-type GlobalConfig struct {
-	LogConfig config.LogConfig `yaml:"log"`
+// MainConfig global config
+type MainConfig struct {
+	Logger map[string][]config.LogConfig `yaml:"logger"`
 
-	TmpDir string       `yaml:"tmp_dir"`
-	Apps   []*AppConfig `yaml:"apps"`
+	Apps []*AppConfig `yaml:"apps"`
+
+	Global GlobalConfig `yaml:"global"`
+}
+
+// GlobalConfig 全局配置
+type GlobalConfig struct {
 	// AllocatableResource 可分配资源
 	AllocatableResource ResourceQuota `yaml:"allocatable"`
 }
@@ -23,15 +28,22 @@ type AppConfig struct {
 	Name    string        `yaml:"name"`
 	Command CommandConfig `yaml:"command"`
 	Restart string        `yaml:"restart"`
-	Quota   ResourceQuota `yaml:"resources"`
+	// Quota 资源配额
+	Quota ResourceQuota `yaml:"resources"`
 }
 
 // CommandConfig 命令配置
 type CommandConfig struct {
-	WorkDir string            `yaml:"workdir"`
-	Command string            `yaml:"command"`
-	Args    []string          `yaml:"args"`
-	Envs    map[string]string `yaml:"envs"`
+	WorkDir string   `yaml:"workdir"`
+	Command string   `yaml:"command"`
+	Args    []string `yaml:"args"`
+	Envs    []Env    `yaml:"envs"`
+}
+
+// Env 环境变量
+type Env struct {
+	Key   string `yaml:"key"`
+	Value string `yaml:"value"`
 }
 
 // ResourceQuota 资源配额
@@ -63,13 +75,13 @@ type AllocatableResource struct {
 	Resource `yaml:",inline"`
 }
 
-func LoadConfig(file string) (*GlobalConfig, error) {
+func LoadConfig(file string) (*MainConfig, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
 		logs.ErrorContextf(nil, "read config file %s failed, %s", file, err)
 		return nil, err
 	}
-	cfg := &GlobalConfig{}
+	cfg := &MainConfig{}
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		logs.ErrorContextf(nil, "unmarshal config file %s failed, %s", file, err)
 		return nil, err

@@ -1,31 +1,24 @@
 package daemon
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/deeprpa/fuck-gpu/config"
 	"github.com/ygpkg/yg-go/lifecycle"
 )
 
 // Daemon background daemon
 type Daemon struct {
-	cfg *config.GlobalConfig
+	cfg *config.MainConfig
 	lc  *lifecycle.LifeCycle
 
-	apps []*App
+	apps []*AppReplicaController
 }
 
 // NewDaemon Create a new daemon instance
-func NewDaemon(lc *lifecycle.LifeCycle, cfg *config.GlobalConfig) (*Daemon, error) {
+func NewDaemon(lc *lifecycle.LifeCycle, cfg *config.MainConfig) (*Daemon, error) {
 	d := &Daemon{
 		cfg:  cfg,
 		lc:   lc,
-		apps: []*App{},
-	}
-	err := os.MkdirAll(cfg.TmpDir, 0755)
-	if err != nil {
-		return nil, fmt.Errorf("mkdir tmpdir %v failed, %s", cfg.TmpDir, err)
+		apps: []*AppReplicaController{},
 	}
 
 	for _, appCfg := range d.cfg.Apps {
@@ -102,7 +95,7 @@ func (d *Daemon) Status() *DaemonStatus {
 	return sts
 }
 
-func (d *Daemon) App() *App {
+func (d *Daemon) App() *AppReplicaController {
 	if len(d.apps) == 0 {
 		return nil
 	}

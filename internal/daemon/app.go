@@ -8,7 +8,7 @@ import (
 	"github.com/ygpkg/yg-go/logs"
 )
 
-type App struct {
+type AppReplicaController struct {
 	cfg *config.AppConfig
 	ctx context.Context
 
@@ -17,8 +17,8 @@ type App struct {
 	args    []string
 }
 
-func NewApp(ictx context.Context, cfg *config.AppConfig) (*App, error) {
-	app := &App{
+func NewApp(ictx context.Context, cfg *config.AppConfig) (*AppReplicaController, error) {
+	app := &AppReplicaController{
 		cfg:     cfg,
 		ctx:     logs.WithContextFields(ictx, "app", cfg.Name),
 		startAt: time.Now(),
@@ -35,7 +35,7 @@ func NewApp(ictx context.Context, cfg *config.AppConfig) (*App, error) {
 	return app, nil
 }
 
-func (a *App) NewCommand(cfg config.CommandConfig) (*Command, error) {
+func (a *AppReplicaController) NewCommand(cfg config.CommandConfig) (*Command, error) {
 	c := &Command{
 		appName:       a.cfg.Name,
 		cfg:           cfg,
@@ -54,18 +54,18 @@ func (a *App) NewCommand(cfg config.CommandConfig) (*Command, error) {
 	return c, nil
 }
 
-func (a *App) Start() {
+func (a *AppReplicaController) Start() {
 	go a.cmd.Start()
 }
 
-func (a *App) ExitSpare() {
+func (a *AppReplicaController) ExitSpare() {
 	if a.cmd == nil {
 		return
 	}
 	a.cmd.Exit()
 }
 
-func (a *App) Restart() error {
+func (a *AppReplicaController) Restart() error {
 	a.ExitSpare()
 
 	a.cmd.Exit()
