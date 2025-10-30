@@ -34,14 +34,14 @@ type AppConfig struct {
 	Name    string        `yaml:"name"`
 	Command CommandConfig `yaml:"command"`
 	Restart string        `yaml:"restart"`
+	Quota   ResourceQuota `yaml:"resources"`
 }
 
 // CommandConfig 命令配置
 type CommandConfig struct {
-	Command string            `yaml:"command"`
 	WorkDir string            `yaml:"workdir"`
+	Command string            `yaml:"command"`
 	Args    []string          `yaml:"args"`
-	VerArgs []string          `yaml:"ver_args"`
 	Envs    map[string]string `yaml:"envs"`
 }
 
