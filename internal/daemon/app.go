@@ -17,7 +17,7 @@ type AppReplicaController struct {
 	args    []string
 }
 
-func NewApp(ictx context.Context, cfg *config.AppConfig) (*AppReplicaController, error) {
+func NewAppController(ictx context.Context, cfg *config.AppConfig) (*AppReplicaController, error) {
 	app := &AppReplicaController{
 		cfg:     cfg,
 		ctx:     logs.WithContextFields(ictx, "app", cfg.Name),
@@ -42,7 +42,7 @@ func (a *AppReplicaController) NewCommand(cfg config.CommandConfig) (*Command, e
 		ctx:           logs.WithContextFields(a.ctx, "module", "command"),
 		chExitRoutine: make(chan struct{}),
 		errExit:       make(chan error),
-		retryTimes:    1,
+		retryTimes:    0,
 	}
 
 	cmd, err := c.getCommand(cfg)

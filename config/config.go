@@ -14,13 +14,14 @@ type MainConfig struct {
 
 	Apps []*AppConfig `yaml:"apps"`
 
+	// Global 全局配置
 	Global GlobalConfig `yaml:"global"`
 }
 
 // GlobalConfig 全局配置
 type GlobalConfig struct {
-	// AllocatableResource 可分配资源
-	AllocatableResource ResourceQuota `yaml:"allocatable"`
+	// AllocatableResource 整体可分配资源
+	AllocatableResource *Resource `yaml:"allocatable,omitempty"`
 }
 
 // AppConfig 应用配置
@@ -29,7 +30,8 @@ type AppConfig struct {
 	Command CommandConfig `yaml:"command"`
 	Restart string        `yaml:"restart"`
 	// Quota 资源配额
-	Quota ResourceQuota `yaml:"resources"`
+	Quota         ResourceQuota `yaml:"resources"`
+	ReplicaPolicy ReplicaPolicy `yaml:"replica"`
 }
 
 // CommandConfig 命令配置
@@ -46,21 +48,16 @@ type Env struct {
 	Value string `yaml:"value"`
 }
 
-// ResourceQuota 资源配额
-type ResourceQuota struct {
-	// Require 资源需求
-	Require Resource `yaml:"require"`
-	// Limit   Resource `yaml:"limit"`
-}
-
 // ReplicaPolicy 副本策略
 type ReplicaPolicy struct {
 	// Static 静态副本数，0表示不限制
-	Static int `yaml:"static"`
+	Static *int `yaml:"static,omitempty"`
 	// MaxReplicas 最大副本数，0表示不限制
-	MaxReplicas int `yaml:"max_replicas"`
+	MaxReplicas *int `yaml:"max_replicas,omitempty"`
 	// MinReplicas 最小副本数，0表示不限制
-	MinReplicas int `yaml:"min_replicas"`
+	MinReplicas *int `yaml:"min_replicas,omitempty"`
+	// Require 需要的资源
+	Require *Resource `yaml:"require,omitempty"`
 }
 
 // Resource 资源

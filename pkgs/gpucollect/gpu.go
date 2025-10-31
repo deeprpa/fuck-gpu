@@ -20,6 +20,12 @@ type GPUInfo struct {
 	MemoryUsed  config.MemorySize
 }
 
+// String string for Gpu info
+func (g GPUInfo) String() string {
+	return fmt.Sprintf("%s %s[%s] used: %v, free: %v, total: %v",
+		g.Name, g.Index, g.UUID, g.MemoryUsed, g.MemoryFree, g.MemoryTotal)
+}
+
 // GetNvidiaGPUMemory 获取当前系统中所有 NVIDIA GPU 的显存信息
 func GetNvidiaGPUMemory() ([]GPUInfo, error) {
 	// 使用 nvidia-smi 查询 GPU 显存信息
