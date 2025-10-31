@@ -15,7 +15,7 @@ type Daemon struct {
 	cfg *config.MainConfig
 	lc  *lifecycle.LifeCycle
 
-	apps []*AppReplicaController
+	apps map[string]*AppReplicaController
 
 	// InitStatus 初始化的状态
 	InitStatus *EnvStatus
@@ -35,22 +35,20 @@ func NewDaemon(lc *lifecycle.LifeCycle, cfg *config.MainConfig) (*Daemon, error)
 		ctx:  logs.WithContextFields(lc.Context(), "daemon"),
 		cfg:  cfg,
 		lc:   lc,
-		apps: []*AppReplicaController{},
+		apps: map[string]*AppReplicaController{},
 	}
 
-	for _, appCfg := range d.cfg.Apps {
-		app, err := NewAppController(lc.Context(), appCfg)
-		if err != nil {
-			return nil, err
-		}
-		d.apps = append(d.apps, app)
-	}
 	return d, nil
 }
 
 func (d *Daemon) Run() error {
 	if err := d.loadCurrentStatus(); err != nil {
 		logs.ErrorContextf(d.ctx, "load current env status failed, %s", err)
+		return err
+	}
+
+	if err := d.schedule(); err != nil {
+		logs.ErrorContextf(d.ctx, "schedule failed, %s", err)
 		return err
 	}
 
@@ -107,8 +105,78 @@ func (d *Daemon) loadCurrentStatus() error {
 // schedule 调度
 func (d *Daemon) schedule() error {
 	if d.InitStatus == nil {
-		logs.WarnContextf(d.ctx, "")
+		logs.WarnContextf(d.ctx, "not initialized yet")
 		return nil
+	}
+
+	apps := map[string]*AppReplicaController{}
+	needScheApps := map[string]struct{}{}
+	// 处理Static副本数的应用
+	for _, appCfg := range d.cfg.Apps {
+		if appCfg.ReplicaPolicy.Static != nil {
+			app, err := NewAppReplicaController(d.ctx, appCfg, *appCfg.ReplicaPolicy.Static)
+			if err != nil {
+				logs.ErrorContextf(d.ctx, "create app replica controller for app %s failed, %s", appCfg.Name, err)
+				return err
+			}
+			apps[appCfg.Name] = app
+		} else {
+			needScheApps[appCfg.Name] = struct{}{}
+		}
+	}
+
+	// 按资源调度的应用
+	dynamicPlan := map[string]int{}
+	freeSize := d.InitStatus.Resource.GPUMemory
+LOOP:
+	for {
+		for _, appCfg := range d.cfg.Apps {
+			if _, ok := needScheApps[appCfg.Name]; !ok {
+				continue
+			}
+			if _, ok := dynamicPlan[appCfg.Name]; !ok {
+				dynamicPlan[appCfg.Name] = 0
+			}
+			repPol := appCfg.ReplicaPolicy
+			if repPol.Require != nil &&
+				repPol.Require.GPUMemory > 0 {
+				requireMem := repPol.Require.GPUMemory
+				if _, ok := dynamicPlan[appCfg.Name]; ok {
+					if repPol.MaxReplicas != nil {
+						if dynamicPlan[appCfg.Name] >= *repPol.MaxReplicas {
+							delete(needScheApps, appCfg.Name)
+							continue
+						}
+					}
+				}
+				freeSize -= requireMem
+				if freeSize < 0 {
+					break LOOP
+				}
+				dynamicPlan[appCfg.Name]++
+				if len(needScheApps) == 0 {
+					break LOOP
+				}
+			}
+		}
+	}
+
+	for _, appCfg := range d.cfg.Apps {
+		if _, ok := dynamicPlan[appCfg.Name]; !ok {
+			continue
+		}
+		replicas := dynamicPlan[appCfg.Name]
+		if replicas <= 0 {
+			logs.WarnContextf(d.ctx, "no enough resources to schedule app %s, need %s",
+				appCfg.Name, appCfg.ReplicaPolicy.Require)
+			continue
+		}
+		arc, err := NewAppReplicaController(d.ctx, appCfg, replicas)
+		if err != nil {
+			logs.ErrorContextf(d.ctx, "create app replica controller for app %s failed, %s", appCfg.Name, err)
+			return err
+		}
+		apps[appCfg.Name] = arc
 	}
 	return nil
 }
@@ -141,39 +209,32 @@ func (d *Daemon) Status() *DaemonStatus {
 
 	for _, app := range d.apps {
 		ast := &AppStatus{
-			Name:      app.cfg.Name,
+			Name:      app.appCfg.Name,
 			StartedAt: app.startAt.String(),
 		}
-		if cmd := app.cmd; cmd != nil {
-			if cmd.startedAt != nil {
-				ast.Main.StartedAt = cmd.startedAt.String()
-			}
-			if cmd.firstStartedAt != nil {
-				ast.Main.FirstStartedAt = cmd.firstStartedAt.String()
-			}
-			if cmd.localVer != nil {
-				ast.Main.Version = cmd.localVer.String()
-			}
-			ast.Main.RetryTimes = int(cmd.retryTimes)
-			if cc := cmd.cmd; cc != nil {
-				ast.Main.Path = cc.Path
-				if cc.Process != nil {
-					ast.Main.Pid = cc.Process.Pid
-				}
-			}
-		}
+		// if cmd := app.cmd; cmd != nil {
+		// 	if cmd.startedAt != nil {
+		// 		ast.Main.StartedAt = cmd.startedAt.String()
+		// 	}
+		// 	if cmd.firstStartedAt != nil {
+		// 		ast.Main.FirstStartedAt = cmd.firstStartedAt.String()
+		// 	}
+		// 	if cmd.localVer != nil {
+		// 		ast.Main.Version = cmd.localVer.String()
+		// 	}
+		// 	ast.Main.RetryTimes = int(cmd.retryTimes)
+		// 	if cc := cmd.cmd; cc != nil {
+		// 		ast.Main.Path = cc.Path
+		// 		if cc.Process != nil {
+		// 			ast.Main.Pid = cc.Process.Pid
+		// 		}
+		// 	}
+		// }
 
 		sts.Apps = append(sts.Apps, ast)
 	}
 
 	return sts
-}
-
-func (d *Daemon) App() *AppReplicaController {
-	if len(d.apps) == 0 {
-		return nil
-	}
-	return d.apps[0]
 }
 
 // Schedule 调度

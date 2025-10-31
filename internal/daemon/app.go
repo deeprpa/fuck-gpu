@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/deeprpa/fuck-gpu/config"
@@ -9,43 +10,44 @@ import (
 )
 
 type AppReplicaController struct {
-	cfg *config.AppConfig
-	ctx context.Context
+	appCfg config.AppConfig
+	ctx    context.Context
 
 	startAt time.Time
-	cmd     *Command
-	args    []string
+	cmds    []*Command
 }
 
-func NewAppController(ictx context.Context, cfg *config.AppConfig) (*AppReplicaController, error) {
+func NewAppReplicaController(ictx context.Context, cfg config.AppConfig, replica int) (*AppReplicaController, error) {
 	app := &AppReplicaController{
-		cfg:     cfg,
+		appCfg:  cfg,
 		ctx:     logs.WithContextFields(ictx, "app", cfg.Name),
 		startAt: time.Now(),
-		args:    cfg.Command.Args,
 	}
 
-	cmd, err := app.NewCommand(cfg.Command)
-	if err != nil {
-		logs.ErrorContextf(app.ctx, "new command %v failed, %s", cfg.Command, err)
-		return nil, err
+	for i := 0; i < replica; i++ {
+		cmd, err := app.NewCommand(app.ctx, cfg, i)
+		if err != nil {
+			logs.ErrorContextf(app.ctx, "new command %v failed, %s", cfg.Command, err)
+			return nil, err
+		}
+		app.cmds = append(app.cmds, cmd)
 	}
-	app.cmd = cmd
 
 	return app, nil
 }
 
-func (a *AppReplicaController) NewCommand(cfg config.CommandConfig) (*Command, error) {
+func (a *AppReplicaController) NewCommand(ictx context.Context, cfg config.AppConfig, idx int) (*Command, error) {
 	c := &Command{
-		appName:       a.cfg.Name,
+		appName:       cfg.Name,
 		cfg:           cfg,
-		ctx:           logs.WithContextFields(a.ctx, "module", "command"),
+		idx:           idx,
+		ctx:           logs.WithContextFields(a.ctx, "idx", fmt.Sprintf("%d", idx+1)),
 		chExitRoutine: make(chan struct{}),
 		errExit:       make(chan error),
 		retryTimes:    0,
 	}
 
-	cmd, err := c.getCommand(cfg)
+	cmd, err := c.getCommand(cfg.Command)
 	if err != nil {
 		return nil, err
 	}
@@ -55,26 +57,19 @@ func (a *AppReplicaController) NewCommand(cfg config.CommandConfig) (*Command, e
 }
 
 func (a *AppReplicaController) Start() {
-	go a.cmd.Start()
-}
-
-func (a *AppReplicaController) ExitSpare() {
-	if a.cmd == nil {
-		return
+	for _, cmd := range a.cmds {
+		go cmd.Start()
 	}
-	a.cmd.Exit()
 }
 
 func (a *AppReplicaController) Restart() error {
-	a.ExitSpare()
+	// a.cmd.Exit()
 
-	a.cmd.Exit()
-
-	ncmd, err := a.NewCommand(a.cfg.Command)
-	if err != nil {
-		return err
-	}
-	ncmd.restart()
-	a.cmd = ncmd
+	// ncmd, err := a.NewCommand(a.cfg)
+	// if err != nil {
+	// 	return err
+	// }
+	// ncmd.restart()
+	// a.cmd = ncmd
 	return nil
 }

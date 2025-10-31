@@ -15,7 +15,8 @@ import (
 type Command struct {
 	appName string
 	ctx     context.Context
-	cfg     config.CommandConfig
+	cfg     config.AppConfig
+	idx     int
 
 	cmd     *exec.Cmd
 	errExit chan error

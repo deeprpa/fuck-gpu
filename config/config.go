@@ -12,7 +12,7 @@ import (
 type MainConfig struct {
 	Logger map[string][]config.LogConfig `yaml:"logger"`
 
-	Apps []*AppConfig `yaml:"apps"`
+	Apps []AppConfig `yaml:"apps"`
 
 	// Global 全局配置
 	Global GlobalConfig `yaml:"global"`
@@ -26,11 +26,9 @@ type GlobalConfig struct {
 
 // AppConfig 应用配置
 type AppConfig struct {
-	Name    string        `yaml:"name"`
-	Command CommandConfig `yaml:"command"`
-	Restart string        `yaml:"restart"`
-	// Quota 资源配额
-	Quota         ResourceQuota `yaml:"resources"`
+	Name          string        `yaml:"name"`
+	Command       CommandConfig `yaml:"command"`
+	RestartPolicy RestartPolicy `yaml:"restart"`
 	ReplicaPolicy ReplicaPolicy `yaml:"replica"`
 }
 
@@ -58,6 +56,13 @@ type ReplicaPolicy struct {
 	MinReplicas *int `yaml:"min_replicas,omitempty"`
 	// Require 需要的资源
 	Require *Resource `yaml:"require,omitempty"`
+}
+
+type RestartPolicy struct {
+	// MaxRetries 最大重试次数，-1表示无限制
+	MaxRetries int `yaml:"max_retries"`
+	// Interval 重试间隔，单位秒
+	Interval int `yaml:"interval"`
 }
 
 // Resource 资源
