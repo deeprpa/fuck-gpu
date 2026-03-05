@@ -1,7 +1,7 @@
 define echo_green
-    printf "\e[38;5;40m"
-    echo "${1}"
-    printf "\e[0m \n"
+	printf "\e[38;5;40m"
+	echo "${1}"
+	printf "\e[0m \n"
 endef
 
 #项目名
@@ -12,7 +12,7 @@ BINARY=${Project}
 Path=github.com/deeprpa/${Project}/version
 #当前版本号,每次更新服务时都必须更新版本号， 或使用 tag, 更新 tag
 # Version=v1.0.1
-Version=$(shell git describe --tags)
+Version=$(shell git describe --tags --dirty)
 GitCommit=$(shell git rev-parse --short HEAD || echo unsupported)
 GoVersion=$(shell go version)
 BuildTime=$(shell date "+%Y-%m-%d_%H:%M:%S")
