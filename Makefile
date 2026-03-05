@@ -1,3 +1,5 @@
+.PHONY: build clean run build-linux images push release-images ver
+
 define echo_green
 	printf "\e[38;5;40m"
 	echo "${1}"
