@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/semver"
@@ -163,7 +164,18 @@ func (c *Command) Exit() error {
 }
 
 func (c *Command) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, error) {
-	cmd := exec.Command(cmdCfg.Command, cmdCfg.Args...)
+	// Process command with template support for instance index
+	cmdStr := applyTemplate(cmdCfg.Command, c.idx)
+
+	// Process args with template support for instance index
+	args := make([]string, len(cmdCfg.Args))
+	for i, arg := range cmdCfg.Args {
+		args[i] = applyTemplate(arg, c.idx)
+	}
+
+	logs.DebugContextf(c.ctx, "Creating command with: %s %v", cmdStr, args)
+
+	cmd := exec.Command(cmdStr, args...)
 	if cmdCfg.WorkDir != "" {
 		cmd.Dir = cmdCfg.WorkDir
 	}
@@ -178,6 +190,12 @@ func (c *Command) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, error) {
 	cmd.Stderr = os.Stdout
 	cmd.Stdout = os.Stdout
 	return cmd, nil
+}
+
+// applyTemplate applies template variables to a string
+func applyTemplate(s string, idx int) string {
+	// Replace {{index}} with instance index
+	return strings.ReplaceAll(s, "{{index}}", fmt.Sprintf("%d", idx))
 }
 
 func (c *Command) waitProcess(pid int) {
