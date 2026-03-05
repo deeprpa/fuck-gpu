@@ -31,7 +31,7 @@ LDFLAGS=-ldflags "-w -s \
 clean:
 	rm -rf ./build
 
-build: clean
+build:
 	-go build -o ./build/panic ./tests/panic/
 	${goflags} go build ${LDFLAGS} -v -o ./build/${Project}
 	# @ before command only output result

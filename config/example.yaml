@@ -12,15 +12,46 @@ logger:
     compress: true
 
 global:
-
+  # 可选：手动指定可分配资源
+  # allocatable:
+  #   gpu_memory: 16G
 
 apps:
 - name: llm-qwen3
   command:
     workdir: ./
-    command: "sleep"
+    command: "server"
     args:
-    - "10"
+    - "--port={{index}}"
+    - "--name=instance_{{index}}"
     envs:
-    - name: APP_NAME
-      value: sleep_a
+    - key: APP_NAME
+      value: sleep_{{index}}
+  restart:
+    max_retries: 3
+    interval: 5
+  replica:
+    # 静态副本数，设置为0表示自动调度
+    static: 0
+    # 需要的GPU内存
+    require:
+      gpu_memory: 4G
+    # 最大副本数
+    max_replicas: 2
+    # 最小副本数
+    min_replicas: 1
+    
+- name: example-app
+  command:
+    workdir: ./
+    command: "echo"
+    args:
+    - "Instance {{index}} started"
+    envs: []
+  restart:
+    max_retries: 0
+    interval: 0
+  replica:
+    static: 1
+    require:
+      gpu_memory: 0
