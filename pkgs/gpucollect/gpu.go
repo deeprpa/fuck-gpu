@@ -22,7 +22,7 @@ type GPUInfo struct {
 
 // String string for Gpu info
 func (g GPUInfo) String() string {
-	return fmt.Sprintf("%s %s[%s] used: %v, free: %v, total: %v",
+	return fmt.Sprintf("%s %v[%s] used: %v, free: %v, total: %v",
 		g.Name, g.Index, g.UUID, g.MemoryUsed, g.MemoryFree, g.MemoryTotal)
 }
 

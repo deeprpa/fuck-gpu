@@ -11,7 +11,9 @@ logger:
     localtime: true
     compress: true
 
-global: {}
+global:
+  allocatable:
+    gpu_memory: 16G
 
 apps:
 - name: llm-qwen3
@@ -29,7 +31,7 @@ apps:
     interval: 5
   replica:
     # 静态副本数，设置为0表示自动调度
-    static: 0
+    static: 1
     # 需要的GPU内存
     require:
       gpu_memory: 4G

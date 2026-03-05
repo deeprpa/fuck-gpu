@@ -32,7 +32,7 @@ type EnvStatus struct {
 // NewDaemon Create a new daemon instance
 func NewDaemon(lc *lifecycle.LifeCycle, cfg *config.MainConfig) (*Daemon, error) {
 	d := &Daemon{
-		ctx:  logs.WithContextFields(lc.Context(), "daemon"),
+		ctx:  logs.WithContextFields(lc.Context(), "module", "daemon"),
 		cfg:  cfg,
 		lc:   lc,
 		apps: map[string]*AppReplicaController{},
@@ -109,21 +109,34 @@ func (d *Daemon) schedule() error {
 		return nil
 	}
 
+	logs.InfoContextf(d.ctx, "Starting schedule process with %d apps", len(d.cfg.Apps))
+	logs.InfoContextf(d.ctx, "Available GPU memory: %v", d.InitStatus.Resource.GPUMemory)
+
 	apps := map[string]*AppReplicaController{}
 	needScheApps := map[string]struct{}{}
 	// 处理Static副本数的应用
 	for _, appCfg := range d.cfg.Apps {
-		if appCfg.ReplicaPolicy.Static != nil {
+		logs.DebugContextf(d.ctx, "Processing app: %s, static replicas: %v", appCfg.Name, appCfg.ReplicaPolicy.Static)
+		if appCfg.ReplicaPolicy.Static != nil && *appCfg.ReplicaPolicy.Static > 0 {
+			logs.InfoContextf(d.ctx, "Creating %d static replicas for app: %s", *appCfg.ReplicaPolicy.Static, appCfg.Name)
 			app, err := NewAppReplicaController(d.ctx, appCfg, *appCfg.ReplicaPolicy.Static)
 			if err != nil {
 				logs.ErrorContextf(d.ctx, "create app replica controller for app %s failed, %s", appCfg.Name, err)
 				return err
 			}
 			apps[appCfg.Name] = app
+		} else if appCfg.ReplicaPolicy.Static != nil && *appCfg.ReplicaPolicy.Static == 0 {
+			// Handle static 0 replicas - they should not be scheduled
+			logs.InfoContextf(d.ctx, "Skipping app %s with static 0 replicas", appCfg.Name)
+			continue
 		} else {
+			// 静态副本数为nil（没有指定），放入动态调度列表
+			logs.InfoContextf(d.ctx, "Adding app %s to dynamic scheduling", appCfg.Name)
 			needScheApps[appCfg.Name] = struct{}{}
 		}
 	}
+
+	logs.InfoContextf(d.ctx, "Dynamic scheduling apps count: %d", len(needScheApps))
 
 	// 按资源调度的应用
 	dynamicPlan := map[string]int{}
@@ -151,9 +164,11 @@ LOOP:
 				}
 				freeSize -= requireMem
 				if freeSize < 0 {
+					logs.WarnContextf(d.ctx, "Not enough resources to schedule more instances for app %s, free: %v, need: %v", appCfg.Name, freeSize+requireMem, requireMem)
 					break LOOP
 				}
 				dynamicPlan[appCfg.Name]++
+				logs.InfoContextf(d.ctx, "Scheduled %d instances for app %s (free: %v)", dynamicPlan[appCfg.Name], appCfg.Name, freeSize)
 				if len(needScheApps) == 0 {
 					break LOOP
 				}
@@ -171,6 +186,7 @@ LOOP:
 				appCfg.Name, appCfg.ReplicaPolicy.Require)
 			continue
 		}
+		logs.InfoContextf(d.ctx, "Creating %d dynamic replicas for app: %s", replicas, appCfg.Name)
 		arc, err := NewAppReplicaController(d.ctx, appCfg, replicas)
 		if err != nil {
 			logs.ErrorContextf(d.ctx, "create app replica controller for app %s failed, %s", appCfg.Name, err)
@@ -179,13 +195,17 @@ LOOP:
 		apps[appCfg.Name] = arc
 	}
 
+	logs.InfoContextf(d.ctx, "Total apps scheduled: %d", len(apps))
+
 	// 更新应用控制器映射
 	d.apps = apps
 
 	// 运行所有应用
+	logs.InfoContextf(d.ctx, "Starting all applications...")
 	for _, app := range d.apps {
 		app.Start()
 	}
+	logs.InfoContextf(d.ctx, "All applications started successfully")
 
 	return nil
 }

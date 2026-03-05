@@ -24,6 +24,8 @@ func NewAppReplicaController(ictx context.Context, cfg config.AppConfig, replica
 		startAt: time.Now(),
 	}
 
+	logs.InfoContextf(app.ctx, "Creating %d replicas for application: %s", replica, cfg.Name)
+
 	for i := 0; i < replica; i++ {
 		cmd, err := app.NewCommand(app.ctx, cfg, i)
 		if err != nil {
@@ -32,6 +34,8 @@ func NewAppReplicaController(ictx context.Context, cfg config.AppConfig, replica
 		}
 		app.cmds = append(app.cmds, cmd)
 	}
+
+	logs.InfoContextf(app.ctx, "Successfully created %d commands for application: %s", len(app.cmds), cfg.Name)
 
 	return app, nil
 }
