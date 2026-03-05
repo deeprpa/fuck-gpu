@@ -23,18 +23,21 @@ apps:
 - name: llm-qwen3
   command:
     workdir: ./
-    command: "server"
+    command: "python"
     args:
-    - "--port={{index}}"
-    - "--name=instance_{{index}}"
+    - "-m"
+    - "http.server"
+    - "{{port}}"
     envs:
     - key: APP_NAME
-      value: sleep_{{index}}
+      value: qwen3_{{index}}
+    - key: PORT
+      value: "{{port}}"
   restart:
     max_retries: 3
     interval: 5
   replica:
-    static: 1
+    static: 2
     require:
       gpu_memory: 4G
     max_replicas: 2
@@ -48,7 +51,7 @@ apps:
     workdir: ./
     command: "echo"
     args:
-    - "Instance {{index}} started"
+    - "Instance {{index}} started on port {{port}}"
     envs: []
   restart:
     max_retries: 0

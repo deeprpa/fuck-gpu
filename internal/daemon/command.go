@@ -181,13 +181,19 @@ func (c *Command) Exit() error {
 }
 
 func (c *Command) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, error) {
+	// Get base port from web app config
+	basePort := 0
+	if c.cfg.WebApp != nil {
+		basePort = c.cfg.WebApp.Port
+	}
+
 	// Process command with template support for instance index
-	cmdStr := applyTemplate(cmdCfg.Command, c.idx)
+	cmdStr := applyTemplate(cmdCfg.Command, c.idx, basePort)
 
 	// Process args with template support for instance index
 	args := make([]string, len(cmdCfg.Args))
 	for i, arg := range cmdCfg.Args {
-		args[i] = applyTemplate(arg, c.idx)
+		args[i] = applyTemplate(arg, c.idx, basePort)
 	}
 
 	logs.DebugContextf(c.ctx, "Creating command with: %s %v", cmdStr, args)
@@ -201,7 +207,9 @@ func (c *Command) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, error) {
 			cmd.Env = make([]string, 0, len(cmdCfg.Envs))
 		}
 		for _, env := range cmdCfg.Envs {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", env.Key, env.Value))
+			// Apply template to environment variable values
+			envValue := applyTemplate(env.Value, c.idx, basePort)
+			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", env.Key, envValue))
 		}
 	}
 	cmd.Stderr = os.Stdout
@@ -210,9 +218,16 @@ func (c *Command) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, error) {
 }
 
 // applyTemplate applies template variables to a string
-func applyTemplate(s string, idx int) string {
+// idx: instance index (0, 1, 2, ...)
+// basePort: base port from web_app config (default 0 if not a web app)
+func applyTemplate(s string, idx int, basePort int) string {
 	// Replace {{index}} with instance index
-	return strings.ReplaceAll(s, "{{index}}", fmt.Sprintf("%d", idx))
+	s = strings.ReplaceAll(s, "{{index}}", fmt.Sprintf("%d", idx))
+	// Replace {{port}} with instance port (basePort + index)
+	if basePort > 0 {
+		s = strings.ReplaceAll(s, "{{port}}", fmt.Sprintf("%d", basePort+idx))
+	}
+	return s
 }
 
 func (c *Command) waitProcess(pid int) {
