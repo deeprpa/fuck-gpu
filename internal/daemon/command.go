@@ -176,7 +176,7 @@ func (c *Command) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, error) {
 		}
 	}
 	cmd.Stderr = os.Stdout
-	// cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stdout
 	return cmd, nil
 }
 

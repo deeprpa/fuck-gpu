@@ -34,7 +34,6 @@ clean:
 	rm -rf ./build
 
 build:
-	-go build -o ./build/panic ./tests/panic/
 	${goflags} go build ${LDFLAGS} -v -o ./build/${Project}
 	# @ before command only output result
 	@echo "build finish !!!"
