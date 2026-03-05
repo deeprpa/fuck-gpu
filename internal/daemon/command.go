@@ -171,8 +171,8 @@ func (c *Command) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, error) {
 		if cmd.Env == nil {
 			cmd.Env = make([]string, 0, len(cmdCfg.Envs))
 		}
-		for k, v := range cmdCfg.Envs {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+		for _, env := range cmdCfg.Envs {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", env.Key, env.Value))
 		}
 	}
 	cmd.Stderr = os.Stdout
