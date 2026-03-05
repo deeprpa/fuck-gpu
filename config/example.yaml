@@ -11,6 +11,10 @@ logger:
     localtime: true
     compress: true
 
+gateway:
+  enable: true
+  listen_addr: ":8080"
+
 global:
   allocatable:
     gpu_memory: 16G
@@ -30,15 +34,14 @@ apps:
     max_retries: 3
     interval: 5
   replica:
-    # 静态副本数，设置为0表示自动调度
     static: 1
-    # 需要的GPU内存
     require:
       gpu_memory: 4G
-    # 最大副本数
     max_replicas: 2
-    # 最小副本数
     min_replicas: 1
+  web_app:
+    port: 8000
+    path_prefix: "/qwen3"
     
 - name: example-app
   command:

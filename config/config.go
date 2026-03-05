@@ -31,6 +31,16 @@ type AppConfig struct {
 	Command       CommandConfig `yaml:"command"`
 	RestartPolicy RestartPolicy `yaml:"restart"`
 	ReplicaPolicy ReplicaPolicy `yaml:"replica"`
+	// WebApp 是否为Web应用，如果是则Gateway会代理此应用
+	WebApp *WebAppConfig `yaml:"web_app,omitempty"`
+}
+
+// WebAppConfig Web应用配置
+type WebAppConfig struct {
+	// Port 应用的端口号，会结合实例索引生成实际端口
+	Port int `yaml:"port"`
+	// PathPrefix URL路径前缀，用于区分不同的服务
+	PathPrefix string `yaml:"path_prefix,omitempty"`
 }
 
 // CommandConfig 命令配置
@@ -80,6 +90,8 @@ type AllocatableResource struct {
 
 // GatewayConfig 网关配置
 type GatewayConfig struct {
+	// Enable 是否启用网关
+	Enable bool `yaml:"enable"`
 	// ListenAddr 监听地址，格式为ip:port
 	ListenAddr string `yaml:"listen_addr"`
 	// Timeout 请求超时时间，单位秒

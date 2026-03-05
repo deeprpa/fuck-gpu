@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/deeprpa/fuck-gpu/config"
+	"github.com/deeprpa/fuck-gpu/internal/gateway"
 	"github.com/deeprpa/fuck-gpu/pkgs/gpucollect"
 	"github.com/ygpkg/yg-go/lifecycle"
 	"github.com/ygpkg/yg-go/logs"
@@ -22,6 +23,9 @@ type Daemon struct {
 
 	// CurrentStatus 当前状态
 	CurrentStatus *EnvStatus
+
+	// Gateway 网关
+	Gateway *gateway.Gateway
 }
 
 // EnvStatus 环境状态
@@ -36,6 +40,13 @@ func NewDaemon(lc *lifecycle.LifeCycle, cfg *config.MainConfig) (*Daemon, error)
 		cfg:  cfg,
 		lc:   lc,
 		apps: map[string]*AppReplicaController{},
+	}
+
+	// Initialize Gateway if enabled
+	if cfg.Gateway.Enable {
+		backends := gateway.GenerateBackends(cfg.Apps)
+		d.Gateway = gateway.NewGateway(d.ctx, &cfg.Gateway, backends)
+		logs.InfoContextf(d.ctx, "Gateway initialized with %d apps", len(backends))
 	}
 
 	return d, nil
@@ -54,6 +65,14 @@ func (d *Daemon) Run() error {
 
 	for _, app := range d.apps {
 		app.Start()
+	}
+
+	// Start Gateway if enabled
+	if d.Gateway != nil {
+		if err := d.Gateway.Start(); err != nil {
+			logs.ErrorContextf(d.ctx, "start gateway failed, %s", err)
+			return err
+		}
 	}
 
 	return nil
