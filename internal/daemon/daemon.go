@@ -116,7 +116,7 @@ func (d *Daemon) schedule() error {
 	needScheApps := map[string]struct{}{}
 	// 处理Static副本数的应用
 	for _, appCfg := range d.cfg.Apps {
-		logs.DebugContextf(d.ctx, "Processing app: %s, static replicas: %v", appCfg.Name, appCfg.ReplicaPolicy.Static)
+		logs.DebugContextf(d.ctx, "Processing app: %s, static replicas: %v", appCfg.Name, *appCfg.ReplicaPolicy.Static)
 		if appCfg.ReplicaPolicy.Static != nil && *appCfg.ReplicaPolicy.Static > 0 {
 			logs.InfoContextf(d.ctx, "Creating %d static replicas for app: %s", *appCfg.ReplicaPolicy.Static, appCfg.Name)
 			app, err := NewAppReplicaController(d.ctx, appCfg, *appCfg.ReplicaPolicy.Static)
@@ -140,37 +140,41 @@ func (d *Daemon) schedule() error {
 
 	// 按资源调度的应用
 	dynamicPlan := map[string]int{}
-	freeSize := d.InitStatus.Resource.GPUMemory
-LOOP:
-	for {
-		for _, appCfg := range d.cfg.Apps {
-			if _, ok := needScheApps[appCfg.Name]; !ok {
-				continue
-			}
-			if _, ok := dynamicPlan[appCfg.Name]; !ok {
-				dynamicPlan[appCfg.Name] = 0
-			}
-			repPol := appCfg.ReplicaPolicy
-			if repPol.Require != nil &&
-				repPol.Require.GPUMemory > 0 {
-				requireMem := repPol.Require.GPUMemory
-				if _, ok := dynamicPlan[appCfg.Name]; ok {
-					if repPol.MaxReplicas != nil {
-						if dynamicPlan[appCfg.Name] >= *repPol.MaxReplicas {
-							delete(needScheApps, appCfg.Name)
-							continue
+
+	// 如果没有需要动态调度的应用，直接跳过后续逻辑
+	if len(needScheApps) > 0 {
+		freeSize := d.InitStatus.Resource.GPUMemory
+	LOOP:
+		for {
+			for _, appCfg := range d.cfg.Apps {
+				if _, ok := needScheApps[appCfg.Name]; !ok {
+					continue
+				}
+				if _, ok := dynamicPlan[appCfg.Name]; !ok {
+					dynamicPlan[appCfg.Name] = 0
+				}
+				repPol := appCfg.ReplicaPolicy
+				if repPol.Require != nil &&
+					repPol.Require.GPUMemory > 0 {
+					requireMem := repPol.Require.GPUMemory
+					if _, ok := dynamicPlan[appCfg.Name]; ok {
+						if repPol.MaxReplicas != nil {
+							if dynamicPlan[appCfg.Name] >= *repPol.MaxReplicas {
+								delete(needScheApps, appCfg.Name)
+								continue
+							}
 						}
 					}
-				}
-				freeSize -= requireMem
-				if freeSize < 0 {
-					logs.WarnContextf(d.ctx, "Not enough resources to schedule more instances for app %s, free: %v, need: %v", appCfg.Name, freeSize+requireMem, requireMem)
-					break LOOP
-				}
-				dynamicPlan[appCfg.Name]++
-				logs.InfoContextf(d.ctx, "Scheduled %d instances for app %s (free: %v)", dynamicPlan[appCfg.Name], appCfg.Name, freeSize)
-				if len(needScheApps) == 0 {
-					break LOOP
+					freeSize -= requireMem
+					if freeSize < 0 {
+						logs.WarnContextf(d.ctx, "Not enough resources to schedule more instances for app %s, free: %v, need: %v", appCfg.Name, freeSize+requireMem, requireMem)
+						break LOOP
+					}
+					dynamicPlan[appCfg.Name]++
+					logs.InfoContextf(d.ctx, "Scheduled %d instances for app %s (free: %v)", dynamicPlan[appCfg.Name], appCfg.Name, freeSize)
+					if len(needScheApps) == 0 {
+						break LOOP
+					}
 				}
 			}
 		}
