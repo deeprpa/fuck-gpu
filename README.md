@@ -10,6 +10,11 @@
 4. **实例管理**：创建、启动、监控和自动重启应用实例
 5. **资源优化**：最大化利用GPU显存，避免浪费
 
+## 模板支持
+
+支持在命令和参数中使用模板变量：
+- `{{index}}`：实例索引号（从0开始）
+
 ## 使用说明
 
 ### 启动守护进程
@@ -56,10 +61,11 @@ apps:
     workdir: ./
     command: "sleep"
     args:
+    - "--port={{index}}"
     - "10"
     envs:
     - key: APP_NAME
-      value: sleep_a
+      value: sleep_{{index}}
   restart:
     max_retries: 3
     interval: 5
