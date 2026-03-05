@@ -31,6 +31,7 @@ type Command struct {
 	chExitRoutine chan struct{}
 	retryTimes    time.Duration
 	isRestarting  bool
+	isStarted     bool
 }
 
 func (c *Command) checkProcessStatus() {
@@ -86,6 +87,13 @@ func (c *Command) checkProcessStatus() {
 }
 
 func (c *Command) Start() error {
+	// 防止重复启动
+	if c.isStarted {
+		logs.DebugContextf(c.ctx, "already started, skipping")
+		return nil
+	}
+	c.isStarted = true
+
 	now := time.Now()
 	c.startedAt = &now
 	if c.firstStartedAt == nil {
