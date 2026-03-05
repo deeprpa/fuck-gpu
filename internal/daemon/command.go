@@ -30,6 +30,7 @@ type Command struct {
 
 	chExitRoutine chan struct{}
 	retryTimes    time.Duration
+	isRestarting  bool
 }
 
 func (c *Command) checkProcessStatus() {
@@ -103,6 +104,14 @@ func (c *Command) Start() error {
 }
 
 func (c *Command) restart() error {
+	// 防止重复重启
+	if c.isRestarting {
+		logs.DebugContextf(c.ctx, "already restarting, skipping")
+		return nil
+	}
+	c.isRestarting = true
+	defer func() { c.isRestarting = false }()
+
 	waitTime := time.Second * c.retryTimes * 2
 	logs.InfoContextf(c.ctx, "restarting later %s", waitTime)
 	time.Sleep(waitTime)
