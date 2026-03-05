@@ -61,8 +61,7 @@ apps:
     workdir: ./
     command: "sleep"
     args:
-    - "--port={{index}}"
-    - "10"
+    - "1{{index}}"
     envs:
     - key: APP_NAME
       value: sleep_{{index}}

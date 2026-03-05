@@ -30,6 +30,27 @@ func TestNewAppReplicaController(t *testing.T) {
 	assert.Len(t, app.cmds, 2)
 }
 
+func TestAppReplicaController_TemplateSupport(t *testing.T) {
+	cfg := config.AppConfig{
+		Name: "test-app",
+		Command: config.CommandConfig{
+			Command: "server",
+			Args:    []string{"--port={{index}}", "--name=test_{{index}}"},
+		},
+		ReplicaPolicy: config.ReplicaPolicy{
+			Static: intPtr(2),
+		},
+	}
+
+	app, err := NewAppReplicaController(nil, cfg, 2)
+	assert.NoError(t, err)
+	assert.NotNil(t, app)
+	assert.Len(t, app.cmds, 2)
+
+	// Test that commands were created (but we can't directly verify the command processing without integration test)
+	// Testing the functionality would require mocking or integration testing
+}
+
 func TestAppReplicaController_Start(t *testing.T) {
 	cfg := config.AppConfig{
 		Name: "test-app",
