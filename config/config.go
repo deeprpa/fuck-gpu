@@ -14,6 +14,7 @@ type MainConfig struct {
 
 	Apps []AppConfig `yaml:"apps"`
 
+	Gateway GatewayConfig `yaml:"gateway"`
 	// Global 全局配置
 	Global GlobalConfig `yaml:"global"`
 }
@@ -75,6 +76,16 @@ type AllocatableResource struct {
 	// Mode 资源获取模式，auto/manual
 	Mode     string
 	Resource `yaml:",inline"`
+}
+
+// GatewayConfig 网关配置
+type GatewayConfig struct {
+	// ListenAddr 监听地址，格式为ip:port
+	ListenAddr string `yaml:"listen_addr"`
+	// Timeout 请求超时时间，单位秒
+	Timeout int `yaml:"timeout"`
+	// ThreadPoolSize 线程池大小
+	ThreadPoolSize *int `yaml:"thread_pool_size,omitempty"`
 }
 
 func LoadConfig(file string) (*MainConfig, error) {

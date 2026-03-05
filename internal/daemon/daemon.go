@@ -178,6 +178,15 @@ LOOP:
 		}
 		apps[appCfg.Name] = arc
 	}
+
+	// 更新应用控制器映射
+	d.apps = apps
+
+	// 运行所有应用
+	for _, app := range d.apps {
+		app.Start()
+	}
+
 	return nil
 }
 

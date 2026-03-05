@@ -7,8 +7,8 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.10.1
-	github.com/ygpkg/yg-go v1.23.34
-	gopkg.in/yaml.v2 v2.4.0
+	github.com/ygpkg/yg-go v1.23.51
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -55,6 +55,5 @@ require (
 	golang.org/x/text v0.28.0 // indirect
 	google.golang.org/protobuf v1.36.7 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/gorm v1.30.1 // indirect
 )

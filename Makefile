@@ -43,7 +43,7 @@ build: clean
 	@${call echo_green,"build finished! The target is ${current_dir}/build/${Project}."}
 
 run:
-	${goflags} go run ${LDFLAGS} main.go -D d 
+	${goflags} go run ${LDFLAGS} main.go d
 
 build-linux:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ${LDFLAGS} -o build/${Project} -v

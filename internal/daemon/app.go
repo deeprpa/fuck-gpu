@@ -62,14 +62,28 @@ func (a *AppReplicaController) Start() {
 	}
 }
 
-func (a *AppReplicaController) Restart() error {
-	// a.cmd.Exit()
+func (a *AppReplicaController) Stop() {
+	for _, cmd := range a.cmds {
+		cmd.Exit()
+	}
+}
 
-	// ncmd, err := a.NewCommand(a.cfg)
-	// if err != nil {
-	// 	return err
-	// }
-	// ncmd.restart()
-	// a.cmd = ncmd
+func (a *AppReplicaController) Restart() error {
+	a.Stop()
+
+	// 重新创建命令
+	newCmds := []*Command{}
+	for i := range a.cmds {
+		newCmd, err := a.NewCommand(a.ctx, a.appCfg, i)
+		if err != nil {
+			logs.ErrorContextf(a.ctx, "restart command %v failed, %s", a.appCfg.Command, err)
+			return err
+		}
+		newCmds = append(newCmds, newCmd)
+	}
+	a.cmds = newCmds
+
+	// 启动新命令
+	a.Start()
 	return nil
 }

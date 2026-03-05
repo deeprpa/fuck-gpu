@@ -5,7 +5,6 @@ import (
 
 	"github.com/deeprpa/fuck-gpu/internal/api"
 	"github.com/deeprpa/fuck-gpu/internal/daemon"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/ygpkg/yg-go/lifecycle"
 	"github.com/ygpkg/yg-go/logs"
@@ -24,18 +23,18 @@ func daemonCmd() *cobra.Command {
 			lc := lifecycle.New()
 			d, err := daemon.NewDaemon(lc, cfg)
 			if err != nil {
-				logrus.Error("start daemon failed, %s", err)
+				logs.Errorf("start daemon failed, %s", err)
 				return
 			}
 			if err := d.Run(); err != nil {
-				logrus.Error("daemon run failed, %s", err)
+				logs.Errorf("daemon run failed, %s", err)
 				return
 			}
 
 			{
 				l, err := net.Listen("tcp", api.ServeAddr)
 				if err != nil {
-					logrus.Errorf("start internal API server failed, %s", err)
+					logs.Errorf("start internal API server failed, %s", err)
 				} else {
 					lc.AddCloser(l)
 					go api.ListenAndServe(l, d)

@@ -1,6 +1,6 @@
 # Fuck-GPU
 
-Squeeze GPU resources through multi-instance deployment.
+在GPU卡上按需运行多个实例，让显存尽可能用满，
 
 
 1. 获取GPU余量
