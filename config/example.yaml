@@ -11,10 +11,7 @@ logger:
     localtime: true
     compress: true
 
-global:
-  # 可选：手动指定可分配资源
-  # allocatable:
-  #   gpu_memory: 16G
+global: {}
 
 apps:
 - name: llm-qwen3
