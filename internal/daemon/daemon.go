@@ -323,10 +323,11 @@ func (d *Daemon) buildGatewayBackends() map[string][]*gateway.Backend {
 			for _, replicaIdx := range activeInstanceIndices {
 				backendAddr := applyGatewayBackendTemplate(backendTpl, replicaIdx)
 				backends[groupKey] = append(backends[groupKey], &gateway.Backend{
-					URL:        normalizeGatewayBackendURL(backendAddr),
-					AppName:    appName,
-					ReplicaIdx: replicaIdx,
-					PathPrefix: pathPrefix,
+					URL:         normalizeGatewayBackendURL(backendAddr),
+					AppName:     appName,
+					ReplicaIdx:  replicaIdx,
+					PathPrefix:  pathPrefix,
+					HealthCheck: rule.HealthCheck,
 				})
 			}
 		}

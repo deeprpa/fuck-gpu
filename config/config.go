@@ -37,8 +37,17 @@ type AppConfig struct {
 
 // GatewayBackendConfig app-level gateway routing rule
 type GatewayBackendConfig struct {
-	PathPrefix string `yaml:"path_prefix"`
-	Backend    string `yaml:"backend"`
+	PathPrefix  string                    `yaml:"path_prefix"`
+	Backend     string                    `yaml:"backend"`
+	HealthCheck *GatewayHealthCheckConfig `yaml:"health_check,omitempty"`
+}
+
+type GatewayHealthCheckConfig struct {
+	Path               string         `yaml:"path,omitempty"`
+	Interval           *time.Duration `yaml:"interval,omitempty"`
+	Timeout            *time.Duration `yaml:"timeout,omitempty"`
+	HealthyThreshold   *int           `yaml:"healthy_threshold,omitempty"`
+	UnhealthyThreshold *int           `yaml:"unhealthy_threshold,omitempty"`
 }
 
 // CommandConfig 命令配置

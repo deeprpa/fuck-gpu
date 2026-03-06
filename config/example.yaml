@@ -44,6 +44,12 @@ apps:
   gateway_backends:
     - path_prefix: "/qwen3"
       backend: "127.0.0.1:809{{index}}"
+      health_check:
+        path: "/health"
+        interval: 2s
+        timeout: 1s
+        healthy_threshold: 1
+        unhealthy_threshold: 1
 
 # - name: echo-app
 #   command:
