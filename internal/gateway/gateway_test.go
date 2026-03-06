@@ -47,3 +47,21 @@ func TestGatewayProxyRequest_ForwardsWithoutRedirect(t *testing.T) {
 	assert.Equal(t, "backend-path=/qwen3/chat query=x=1", string(body))
 	assert.NotEqual(t, http.StatusFound, r.Code)
 }
+
+func TestGatewayRemoveBackend(t *testing.T) {
+	g := NewGateway(context.TODO(), &config.GatewayConfig{Enable: true}, map[string][]*Backend{
+		"llm-qwen3|/qwen3": {
+			{URL: "http://127.0.0.1:8090", AppName: "llm-qwen3", ReplicaIdx: 0, PathPrefix: "/qwen3"},
+			{URL: "http://127.0.0.1:8091", AppName: "llm-qwen3", ReplicaIdx: 1, PathPrefix: "/qwen3"},
+		},
+		"llm-other|/other": {
+			{URL: "http://127.0.0.1:9000", AppName: "llm-other", ReplicaIdx: 0, PathPrefix: "/other"},
+		},
+	})
+
+	g.RemoveBackend("llm-qwen3", 1)
+
+	require.Len(t, g.backends["llm-qwen3|/qwen3"], 1)
+	assert.Equal(t, 0, g.backends["llm-qwen3|/qwen3"][0].ReplicaIdx)
+	require.Len(t, g.backends["llm-other|/other"], 1)
+}

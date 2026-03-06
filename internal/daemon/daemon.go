@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/deeprpa/fuck-gpu/config"
 	"github.com/deeprpa/fuck-gpu/internal/gateway"
@@ -37,8 +38,13 @@ type EnvStatus struct {
 
 // NewDaemon Create a new daemon instance
 func NewDaemon(lc *lifecycle.LifeCycle, cfg *config.MainConfig) (*Daemon, error) {
+	baseCtx := context.TODO()
+	if lc != nil {
+		baseCtx = lc.Context()
+	}
+
 	d := &Daemon{
-		ctx:  logs.WithContextFields(lc.Context()),
+		ctx:  logs.WithContextFields(baseCtx),
 		cfg:  cfg,
 		lc:   lc,
 		apps: map[string]*AppReplicaController{},
@@ -86,7 +92,7 @@ func (d *Daemon) Run() error {
 	}
 
 	if d.Gateway != nil {
-		d.Gateway.UpdateBackends(d.buildGatewayBackends())
+		d.updateGatewayBackendsWithDelay()
 	}
 
 	// Start Gateway if enabled
@@ -104,14 +110,11 @@ func (d *Daemon) Run() error {
 func (d *Daemon) loadCurrentStatus() error {
 	globalCfg := d.cfg.Global
 	if globalCfg.AllocatableResource != nil {
-		d.InitStatus = &EnvStatus{
-			Resource: *d.cfg.Global.AllocatableResource,
-		}
-		d.CurrentStatus = &EnvStatus{
-			Resource: *d.cfg.Global.AllocatableResource,
-		}
+		d.InitStatus = &EnvStatus{Resource: *d.cfg.Global.AllocatableResource}
+		d.CurrentStatus = &EnvStatus{Resource: *d.cfg.Global.AllocatableResource}
 		return nil
 	}
+
 	gpuinfos, err := gpucollect.GetNvidiaGPUMemory()
 	if err != nil {
 		logs.ErrorContextf(d.ctx, "failed to get gpu memory info: %v", err)
@@ -121,6 +124,7 @@ func (d *Daemon) loadCurrentStatus() error {
 		logs.WarnContextf(d.ctx, "no gpu found")
 		return nil
 	}
+
 	total := &gpucollect.GPUInfo{}
 	for _, gpuinfo := range gpuinfos {
 		logs.InfoContextf(d.ctx, "gpu memory info: %v", gpuinfo)
@@ -128,18 +132,10 @@ func (d *Daemon) loadCurrentStatus() error {
 		total.MemoryTotal += gpuinfo.MemoryTotal
 		total.MemoryUsed += gpuinfo.MemoryUsed
 	}
-	logs.InfoContextf(d.ctx, "total gpu memory free: %v", total.MemoryFree)
-	d.InitStatus = &EnvStatus{
-		Resource: config.Resource{
-			GPUMemory: total.MemoryFree,
-		},
-	}
-	d.CurrentStatus = &EnvStatus{
-		Resource: config.Resource{
-			GPUMemory: total.MemoryFree,
-		},
-	}
 
+	logs.InfoContextf(d.ctx, "total gpu memory free: %v", total.MemoryFree)
+	d.InitStatus = &EnvStatus{Resource: config.Resource{GPUMemory: total.MemoryFree}}
+	d.CurrentStatus = &EnvStatus{Resource: config.Resource{GPUMemory: total.MemoryFree}}
 	return nil
 }
 
@@ -155,13 +151,8 @@ func (d *Daemon) schedule() error {
 
 	apps := map[string]*AppReplicaController{}
 	needScheApps := map[string]struct{}{}
-	// 处理Static副本数的应用
+
 	for _, appCfg := range d.cfg.Apps {
-		var staticReplicas interface{} = nil
-		if appCfg.ReplicaPolicy.Static != nil {
-			staticReplicas = *appCfg.ReplicaPolicy.Static
-		}
-		logs.DebugContextf(d.ctx, "Processing app: %s, static replicas: %v", appCfg.Name, staticReplicas)
 		if appCfg.ReplicaPolicy.Static != nil && *appCfg.ReplicaPolicy.Static > 0 {
 			logs.InfoContextf(d.ctx, "Creating %d static replicas for app: %s", *appCfg.ReplicaPolicy.Static, appCfg.Name)
 			app, err := NewAppReplicaController(d.ctx, appCfg, *appCfg.ReplicaPolicy.Static)
@@ -169,24 +160,23 @@ func (d *Daemon) schedule() error {
 				logs.ErrorContextf(d.ctx, "create app replica controller for app %s failed, %s", appCfg.Name, err)
 				return err
 			}
+			app.SetDaemon(d)
 			apps[appCfg.Name] = app
-		} else if appCfg.ReplicaPolicy.Static != nil && *appCfg.ReplicaPolicy.Static == 0 {
-			// Handle static 0 replicas - they should not be scheduled
+			continue
+		}
+
+		if appCfg.ReplicaPolicy.Static != nil && *appCfg.ReplicaPolicy.Static == 0 {
 			logs.InfoContextf(d.ctx, "Skipping app %s with static 0 replicas", appCfg.Name)
 			continue
-		} else {
-			// 静态副本数为nil（没有指定），放入动态调度列表
-			logs.InfoContextf(d.ctx, "Adding app %s to dynamic scheduling", appCfg.Name)
-			needScheApps[appCfg.Name] = struct{}{}
 		}
+
+		logs.InfoContextf(d.ctx, "Adding app %s to dynamic scheduling", appCfg.Name)
+		needScheApps[appCfg.Name] = struct{}{}
 	}
 
 	logs.InfoContextf(d.ctx, "Dynamic scheduling apps count: %d", len(needScheApps))
-
-	// 按资源调度的应用
 	dynamicPlan := map[string]int{}
 
-	// 如果没有需要动态调度的应用，直接跳过后续逻辑
 	if len(needScheApps) > 0 {
 		freeSize := d.InitStatus.Resource.GPUMemory
 	LOOP:
@@ -200,39 +190,36 @@ func (d *Daemon) schedule() error {
 				if _, ok := needScheApps[appCfg.Name]; !ok {
 					continue
 				}
+
 				if _, ok := dynamicPlan[appCfg.Name]; !ok {
 					dynamicPlan[appCfg.Name] = 0
 				}
+
 				repPol := appCfg.ReplicaPolicy
-				if repPol.Require != nil &&
-					repPol.Require.GPUMemory > 0 {
+				if repPol.Require != nil && repPol.Require.GPUMemory > 0 {
 					requireMem := repPol.Require.GPUMemory
-					if _, ok := dynamicPlan[appCfg.Name]; ok {
-						if repPol.MaxReplicas != nil {
-							if dynamicPlan[appCfg.Name] >= *repPol.MaxReplicas {
-								delete(needScheApps, appCfg.Name)
-								progress = true
-								continue
-							}
-						}
+					if repPol.MaxReplicas != nil && dynamicPlan[appCfg.Name] >= *repPol.MaxReplicas {
+						delete(needScheApps, appCfg.Name)
+						progress = true
+						continue
 					}
+
 					freeSize -= requireMem
 					if freeSize < 0 {
 						logs.WarnContextf(d.ctx, "Not enough resources to schedule more instances for app %s, free: %v, need: %v", appCfg.Name, freeSize+requireMem, requireMem)
 						break LOOP
 					}
+
 					dynamicPlan[appCfg.Name]++
 					progress = true
 					logs.InfoContextf(d.ctx, "Scheduled %d instances for app %s (free: %v)", dynamicPlan[appCfg.Name], appCfg.Name, freeSize)
-					if len(needScheApps) == 0 {
-						break LOOP
-					}
-				} else {
-					// Dynamic scheduling without resource requirements would otherwise loop forever.
-					delete(needScheApps, appCfg.Name)
-					progress = true
-					logs.WarnContextf(d.ctx, "skip dynamic scheduling for app %s because replica.require.gpu_memory is not set", appCfg.Name)
+					continue
 				}
+
+				// Dynamic scheduling without resource requirements would otherwise loop forever.
+				delete(needScheApps, appCfg.Name)
+				progress = true
+				logs.WarnContextf(d.ctx, "skip dynamic scheduling for app %s because replica.require.gpu_memory is not set", appCfg.Name)
 			}
 
 			if !progress {
@@ -242,30 +229,28 @@ func (d *Daemon) schedule() error {
 	}
 
 	for _, appCfg := range d.cfg.Apps {
-		if _, ok := dynamicPlan[appCfg.Name]; !ok {
+		replicas, ok := dynamicPlan[appCfg.Name]
+		if !ok {
 			continue
 		}
-		replicas := dynamicPlan[appCfg.Name]
 		if replicas <= 0 {
-			logs.WarnContextf(d.ctx, "no enough resources to schedule app %s, need %s",
-				appCfg.Name, appCfg.ReplicaPolicy.Require)
+			logs.WarnContextf(d.ctx, "not enough resources to schedule app %s, need %s", appCfg.Name, appCfg.ReplicaPolicy.Require)
 			continue
 		}
+
 		logs.InfoContextf(d.ctx, "Creating %d dynamic replicas for app: %s", replicas, appCfg.Name)
-		arc, err := NewAppReplicaController(d.ctx, appCfg, replicas)
+		app, err := NewAppReplicaController(d.ctx, appCfg, replicas)
 		if err != nil {
 			logs.ErrorContextf(d.ctx, "create app replica controller for app %s failed, %s", appCfg.Name, err)
 			return err
 		}
-		apps[appCfg.Name] = arc
+		app.SetDaemon(d)
+		apps[appCfg.Name] = app
 	}
 
 	logs.InfoContextf(d.ctx, "Total apps scheduled: %d", len(apps))
-
-	// 更新应用控制器映射
 	d.apps = apps
 
-	// 运行所有应用
 	logs.InfoContextf(d.ctx, "Starting all applications...")
 	for _, app := range d.apps {
 		app.Start()
@@ -278,6 +263,7 @@ func (d *Daemon) schedule() error {
 type DaemonStatus struct {
 	Apps []*AppStatus `json:"apps"`
 }
+
 type AppStatus struct {
 	Name      string
 	Version   string
@@ -297,43 +283,19 @@ type CmdStatus struct {
 }
 
 func (d *Daemon) Status() *DaemonStatus {
-	sts := &DaemonStatus{
-		Apps: []*AppStatus{},
-	}
-
+	sts := &DaemonStatus{Apps: []*AppStatus{}}
 	for _, app := range d.apps {
-		ast := &AppStatus{
+		sts.Apps = append(sts.Apps, &AppStatus{
 			Name:      app.appCfg.Name,
 			StartedAt: app.startAt.String(),
-		}
-		// if cmd := app.cmd; cmd != nil {
-		// 	if cmd.startedAt != nil {
-		// 		ast.Main.StartedAt = cmd.startedAt.String()
-		// 	}
-		// 	if cmd.firstStartedAt != nil {
-		// 		ast.Main.FirstStartedAt = cmd.firstStartedAt.String()
-		// 	}
-		// 	if cmd.localVer != nil {
-		// 		ast.Main.Version = cmd.localVer.String()
-		// 	}
-		// 	ast.Main.RetryTimes = int(cmd.retryTimes)
-		// 	if cc := cmd.cmd; cc != nil {
-		// 		ast.Main.Path = cc.Path
-		// 		if cc.Process != nil {
-		// 			ast.Main.Pid = cc.Process.Pid
-		// 		}
-		// 	}
-		// }
-
-		sts.Apps = append(sts.Apps, ast)
+		})
 	}
-
 	return sts
 }
 
 // Schedule 调度
 func (d *Daemon) Schedule() error {
-	return nil
+	return d.schedule()
 }
 
 func (d *Daemon) buildGatewayBackends() map[string][]*gateway.Backend {
@@ -344,8 +306,8 @@ func (d *Daemon) buildGatewayBackends() map[string][]*gateway.Backend {
 			continue
 		}
 
-		replicaCount := len(controller.cmds)
-		if replicaCount == 0 {
+		activeInstanceIndices := controller.ActiveInstanceIndices()
+		if len(activeInstanceIndices) == 0 {
 			continue
 		}
 
@@ -358,12 +320,12 @@ func (d *Daemon) buildGatewayBackends() map[string][]*gateway.Backend {
 			}
 
 			groupKey := fmt.Sprintf("%s|%s", appName, pathPrefix)
-			for i := 0; i < replicaCount; i++ {
-				backendAddr := applyGatewayBackendTemplate(backendTpl, i)
+			for _, replicaIdx := range activeInstanceIndices {
+				backendAddr := applyGatewayBackendTemplate(backendTpl, replicaIdx)
 				backends[groupKey] = append(backends[groupKey], &gateway.Backend{
 					URL:        normalizeGatewayBackendURL(backendAddr),
 					AppName:    appName,
-					ReplicaIdx: i,
+					ReplicaIdx: replicaIdx,
 					PathPrefix: pathPrefix,
 				})
 			}
@@ -371,6 +333,25 @@ func (d *Daemon) buildGatewayBackends() map[string][]*gateway.Backend {
 	}
 
 	return backends
+}
+
+func (d *Daemon) updateGatewayBackendsWithDelay() {
+	time.AfterFunc(2*time.Second, func() {
+		d.updateGatewayBackends()
+	})
+}
+
+func (d *Daemon) updateGatewayBackends() {
+	if d.Gateway != nil {
+		d.Gateway.UpdateBackends(d.buildGatewayBackends())
+	}
+}
+
+func (d *Daemon) HandleInstanceUnavailable(appName string, replicaIdx int) {
+	if d.Gateway == nil {
+		return
+	}
+	d.Gateway.RemoveBackend(appName, replicaIdx)
 }
 
 func applyGatewayBackendTemplate(backend string, idx int) string {

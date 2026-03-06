@@ -1,6 +1,9 @@
 package daemon
 
 import (
+	"context"
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -34,4 +37,22 @@ func TestRuntimeInstance_CanRestart_ByMaxRetries(t *testing.T) {
 	assert.True(t, c.canRestart())
 	c.retryTimes = 2
 	assert.False(t, c.canRestart())
+}
+
+func TestRuntimeInstance_Restart_NotifyPermanentExitWhenMaxRetriesReached(t *testing.T) {
+	zero := 0
+	notified := false
+	c := &RuntimeInstance{
+		cfg:           config.AppConfig{RestartPolicy: config.RestartPolicy{MaxRetries: &zero}},
+		ctx:           context.TODO(),
+		cmd:           &exec.Cmd{Process: &os.Process{Pid: 99999}},
+		chExitRoutine: make(chan struct{}),
+		onPermanentExit: func(inst *RuntimeInstance) {
+			notified = inst != nil
+		},
+	}
+
+	err := c.restart()
+	assert.NoError(t, err)
+	assert.True(t, notified)
 }

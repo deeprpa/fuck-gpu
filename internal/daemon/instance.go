@@ -37,6 +37,8 @@ type RuntimeInstance struct {
 	isRestarting  bool
 	isStarted     bool
 	logOutput     *prefixedLineWriter
+
+	onPermanentExit func(*RuntimeInstance)
 }
 
 const defaultRestartInterval = 5 * time.Second
@@ -178,6 +180,9 @@ func (c *RuntimeInstance) restart() error {
 
 	if !c.canRestart() {
 		logs.WarnContextf(c.ctx, "restart skipped, max retries reached: %d", c.maxRetriesOrUnlimited())
+		if c.onPermanentExit != nil {
+			c.onPermanentExit(c)
+		}
 		_ = c.Exit()
 		return nil
 	}

@@ -198,6 +198,45 @@ func (g *Gateway) UpdateBackends(backends map[string][]*Backend) {
 	logs.Infof("Gateway backends updated")
 }
 
+func (g *Gateway) RemoveBackend(appName string, replicaIdx int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	removed := false
+	for key, backendList := range g.backends {
+		if len(backendList) == 0 {
+			continue
+		}
+
+		filtered := backendList[:0]
+		for _, backend := range backendList {
+			if backend == nil {
+				continue
+			}
+			if backend.AppName == appName && backend.ReplicaIdx == replicaIdx {
+				removed = true
+				continue
+			}
+			filtered = append(filtered, backend)
+		}
+
+		if len(filtered) == 0 {
+			delete(g.backends, key)
+			delete(g.rrCursor, key)
+			continue
+		}
+
+		g.backends[key] = filtered
+		if cursor, ok := g.rrCursor[key]; ok && cursor >= len(filtered) {
+			g.rrCursor[key] = 0
+		}
+	}
+
+	if removed {
+		logs.Warnf("Gateway backend removed, app=%s replica_idx=%d", appName, replicaIdx)
+	}
+}
+
 func matchPathPrefix(path, prefix string) bool {
 	if prefix == "" || path == "" {
 		return false

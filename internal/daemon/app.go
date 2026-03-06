@@ -13,6 +13,7 @@ type AppReplicaController struct {
 	appCfg config.AppConfig
 	ctx    context.Context
 
+	daemon  *Daemon
 	startAt time.Time
 	cmds    []*RuntimeInstance
 }
@@ -49,6 +50,9 @@ func (a *AppReplicaController) NewCommand(ictx context.Context, cfg config.AppCo
 		chExitRoutine: make(chan struct{}),
 		errExit:       make(chan error),
 		retryTimes:    0,
+		onPermanentExit: func(inst *RuntimeInstance) {
+			a.onInstancePermanentlyExited(inst)
+		},
 	}
 
 	cmd, err := c.getCommand(cfg.Command)
@@ -90,4 +94,53 @@ func (a *AppReplicaController) Restart() error {
 	// 启动新命令
 	a.Start()
 	return nil
+}
+
+// CountActiveInstances counts instances that are still running
+func (a *AppReplicaController) CountActiveInstances() int {
+	count := 0
+	for _, cmd := range a.cmds {
+		if !isInstanceActive(cmd) {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
+// ActiveInstanceIndices returns currently running replica indices.
+func (a *AppReplicaController) ActiveInstanceIndices() []int {
+	indices := make([]int, 0, len(a.cmds))
+	for _, cmd := range a.cmds {
+		if !isInstanceActive(cmd) {
+			continue
+		}
+		indices = append(indices, cmd.Index)
+	}
+	return indices
+}
+
+func isInstanceActive(inst *RuntimeInstance) bool {
+	if inst == nil || inst.cmd == nil {
+		return false
+	}
+	if inst.cmd.Process == nil {
+		return false
+	}
+	if inst.cmd.ProcessState != nil {
+		return false
+	}
+	return true
+}
+
+func (a *AppReplicaController) onInstancePermanentlyExited(inst *RuntimeInstance) {
+	if a.daemon == nil || inst == nil {
+		return
+	}
+	a.daemon.HandleInstanceUnavailable(a.appCfg.Name, inst.Index)
+}
+
+// SetDaemon keeps daemon reference for future controller callbacks.
+func (a *AppReplicaController) SetDaemon(daemon *Daemon) {
+	a.daemon = daemon
 }
