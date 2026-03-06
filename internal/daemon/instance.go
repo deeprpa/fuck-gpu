@@ -13,11 +13,12 @@ import (
 	"github.com/ygpkg/yg-go/logs"
 )
 
-type Command struct {
-	appName string
-	ctx     context.Context
-	cfg     config.AppConfig
-	idx     int
+type RuntimeInstance struct {
+	AppName string
+	Index   int
+
+	ctx context.Context
+	cfg config.AppConfig
 
 	cmd     *exec.Cmd
 	errExit chan error
@@ -34,7 +35,7 @@ type Command struct {
 	isStarted     bool
 }
 
-func (c *Command) checkProcessStatus() {
+func (c *RuntimeInstance) checkProcessStatus() {
 	tickWait := time.Second * 3
 	tc := time.NewTimer(tickWait)
 	for {
@@ -86,7 +87,7 @@ func (c *Command) checkProcessStatus() {
 	}
 }
 
-func (c *Command) Start() error {
+func (c *RuntimeInstance) Start() error {
 	// 防止重复启动
 	if c.isStarted {
 		logs.DebugContextf(c.ctx, "already started, skipping")
@@ -111,7 +112,7 @@ func (c *Command) Start() error {
 	return nil
 }
 
-func (c *Command) restart() error {
+func (c *RuntimeInstance) restart() error {
 	// 防止重复重启
 	if c.isRestarting {
 		logs.DebugContextf(c.ctx, "already restarting, skipping")
@@ -141,7 +142,7 @@ func (c *Command) restart() error {
 	return nil
 }
 
-func (c *Command) waitProcessExit() {
+func (c *RuntimeInstance) waitProcessExit() {
 	err := c.cmd.Wait()
 	if err != nil && c.errExit != nil {
 		c.errExit <- err
@@ -150,7 +151,7 @@ func (c *Command) waitProcessExit() {
 	}
 }
 
-func (c *Command) ReadyToExit() error {
+func (c *RuntimeInstance) ReadyToExit() error {
 	now := time.Now()
 	c.readyExitAt = &now
 	go func() {
@@ -165,7 +166,7 @@ func (c *Command) ReadyToExit() error {
 	return nil
 }
 
-func (c *Command) Exit() error {
+func (c *RuntimeInstance) Exit() error {
 	if c.cmd != nil && c.cmd.Process != nil {
 		if err := c.cmd.Process.Kill(); err != nil {
 			logs.ErrorContextf(c.ctx, "exited command failed, %s", err)
@@ -180,20 +181,17 @@ func (c *Command) Exit() error {
 	return nil
 }
 
-func (c *Command) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, error) {
+func (c *RuntimeInstance) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, error) {
 	// Get base port from web app config
 	basePort := 0
-	if c.cfg.WebApp != nil {
-		basePort = c.cfg.WebApp.Port
-	}
 
 	// Process command with template support for instance index
-	cmdStr := applyTemplate(cmdCfg.Command, c.idx, basePort)
+	cmdStr := applyTemplate(cmdCfg.Command, c.Index, basePort)
 
 	// Process args with template support for instance index
 	args := make([]string, len(cmdCfg.Args))
 	for i, arg := range cmdCfg.Args {
-		args[i] = applyTemplate(arg, c.idx, basePort)
+		args[i] = applyTemplate(arg, c.Index, basePort)
 	}
 
 	logs.DebugContextf(c.ctx, "Creating command with: %s %v", cmdStr, args)
@@ -208,7 +206,7 @@ func (c *Command) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, error) {
 		}
 		for _, env := range cmdCfg.Envs {
 			// Apply template to environment variable values
-			envValue := applyTemplate(env.Value, c.idx, basePort)
+			envValue := applyTemplate(env.Value, c.Index, basePort)
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", env.Key, envValue))
 		}
 	}
@@ -230,7 +228,7 @@ func applyTemplate(s string, idx int, basePort int) string {
 	return s
 }
 
-func (c *Command) waitProcess(pid int) {
+func (c *RuntimeInstance) waitProcess(pid int) {
 	p, err := os.FindProcess(pid)
 	if err != nil {
 		return

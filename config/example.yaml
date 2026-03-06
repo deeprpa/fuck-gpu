@@ -27,36 +27,35 @@ apps:
     args:
     - "-m"
     - "http.server"
-    - "{{port}}"
+    - "808{{index}}"
     envs:
     - key: APP_NAME
       value: qwen3_{{index}}
     - key: PORT
-      value: "{{port}}"
+      value: "808{{index}}"
   restart:
     max_retries: 3
-    interval: 5
+    interval: 5s
   replica:
-    static: 2
     require:
       gpu_memory: 4G
     max_replicas: 2
     min_replicas: 1
-  web_app:
-    port: 8000
-    path_prefix: "/qwen3"
-    
+  gateway_backends:
+    - path_prefix: "/qwen3"
+      backend: "127.0.0.1:808{{index}}"
+
 - name: example-app
   command:
     workdir: ./
     command: "echo"
     args:
-    - "Instance {{index}} started on port {{port}}"
+    - "Instance {{index}} started on port 909{{index}}"
     envs: []
   restart:
     max_retries: 0
     interval: 0
   replica:
-    static: 1
+    static: 3
     require:
       gpu_memory: 0

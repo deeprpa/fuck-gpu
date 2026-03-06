@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"time"
 
 	"github.com/ygpkg/yg-go/config"
 	"github.com/ygpkg/yg-go/logs"
@@ -27,20 +28,17 @@ type GlobalConfig struct {
 
 // AppConfig 应用配置
 type AppConfig struct {
-	Name          string        `yaml:"name"`
-	Command       CommandConfig `yaml:"command"`
-	RestartPolicy RestartPolicy `yaml:"restart"`
-	ReplicaPolicy ReplicaPolicy `yaml:"replica"`
-	// WebApp 是否为Web应用，如果是则Gateway会代理此应用
-	WebApp *WebAppConfig `yaml:"web_app,omitempty"`
+	Name            string                 `yaml:"name"`
+	Command         CommandConfig          `yaml:"command"`
+	RestartPolicy   RestartPolicy          `yaml:"restart"`
+	ReplicaPolicy   ReplicaPolicy          `yaml:"replica"`
+	GatewayBackends []GatewayBackendConfig `yaml:"gateway_backends,omitempty"`
 }
 
-// WebAppConfig Web应用配置
-type WebAppConfig struct {
-	// Port 应用的端口号，会结合实例索引生成实际端口
-	Port int `yaml:"port"`
-	// PathPrefix URL路径前缀，用于区分不同的服务
-	PathPrefix string `yaml:"path_prefix,omitempty"`
+// GatewayBackendConfig app-level gateway routing rule
+type GatewayBackendConfig struct {
+	PathPrefix string `yaml:"path_prefix"`
+	Backend    string `yaml:"backend"`
 }
 
 // CommandConfig 命令配置
@@ -72,8 +70,8 @@ type ReplicaPolicy struct {
 type RestartPolicy struct {
 	// MaxRetries 最大重试次数，-1表示无限制
 	MaxRetries int `yaml:"max_retries"`
-	// Interval 重试间隔，单位秒
-	Interval int `yaml:"interval"`
+	// Interval 重试间隔
+	Interval *time.Duration `yaml:"interval,omitempty"`
 }
 
 // Resource 资源

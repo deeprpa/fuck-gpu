@@ -14,7 +14,7 @@ type AppReplicaController struct {
 	ctx    context.Context
 
 	startAt time.Time
-	cmds    []*Command
+	cmds    []*RuntimeInstance
 }
 
 func NewAppReplicaController(ictx context.Context, cfg config.AppConfig, replica int) (*AppReplicaController, error) {
@@ -40,12 +40,12 @@ func NewAppReplicaController(ictx context.Context, cfg config.AppConfig, replica
 	return app, nil
 }
 
-func (a *AppReplicaController) NewCommand(ictx context.Context, cfg config.AppConfig, idx int) (*Command, error) {
-	c := &Command{
-		appName:       cfg.Name,
+func (a *AppReplicaController) NewCommand(ictx context.Context, cfg config.AppConfig, idx int) (*RuntimeInstance, error) {
+	c := &RuntimeInstance{
+		AppName:       cfg.Name,
 		cfg:           cfg,
-		idx:           idx,
-		ctx:           logs.WithContextFields(a.ctx, "idx", fmt.Sprintf("%d", idx+1)),
+		Index:         idx,
+		ctx:           logs.WithContextFields(a.ctx, "idx", fmt.Sprintf("%d", idx)),
 		chExitRoutine: make(chan struct{}),
 		errExit:       make(chan error),
 		retryTimes:    0,
@@ -76,7 +76,7 @@ func (a *AppReplicaController) Restart() error {
 	a.Stop()
 
 	// 重新创建命令
-	newCmds := []*Command{}
+	newCmds := []*RuntimeInstance{}
 	for i := range a.cmds {
 		newCmd, err := a.NewCommand(a.ctx, a.appCfg, i)
 		if err != nil {

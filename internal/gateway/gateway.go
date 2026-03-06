@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/deeprpa/fuck-gpu/config"
@@ -15,6 +16,7 @@ type Gateway struct {
 	ctx        context.Context
 	cfg        *config.GatewayConfig
 	backends   map[string][]*Backend
+	rrCursor   map[string]int
 	mu         sync.RWMutex
 	httpServer *http.Server
 }
@@ -31,6 +33,7 @@ func NewGateway(ctx context.Context, cfg *config.GatewayConfig, backends map[str
 		ctx:      ctx,
 		cfg:      cfg,
 		backends: backends,
+		rrCursor: map[string]int{},
 	}
 }
 
@@ -49,7 +52,7 @@ func (g *Gateway) Start() error {
 	router.Use(gin.Logger())
 
 	// All requests go through the proxy handler which handles routing
-	router.Any("/", func(c *gin.Context) {
+	router.Any("/*any", func(c *gin.Context) {
 		g.serveRequest(c)
 	})
 
@@ -84,10 +87,10 @@ func (g *Gateway) serveRequest(c *gin.Context) {
 		defer g.mu.RUnlock()
 
 		var backends []map[string]interface{}
-		for appName, appBackends := range g.backends {
+		for _, appBackends := range g.backends {
 			for _, b := range appBackends {
 				backends = append(backends, map[string]interface{}{
-					"app_name":    appName,
+					"app_name":    b.AppName,
 					"replica_idx": b.ReplicaIdx,
 					"url":         b.URL,
 					"path_prefix": b.PathPrefix,
@@ -105,30 +108,41 @@ func (g *Gateway) serveRequest(c *gin.Context) {
 func (g *Gateway) proxyRequest(c *gin.Context) {
 	path := c.Request.URL.Path
 
-	g.mu.RLock()
-	defer g.mu.RUnlock()
+	g.mu.Lock()
+	defer g.mu.Unlock()
 
 	// Try to find matching backend by path prefix
-	var targetBackend *Backend
-	for _, backends := range g.backends {
-		for _, b := range backends {
-			if b.PathPrefix != "" && len(path) > len(b.PathPrefix) && path[:len(b.PathPrefix)] == b.PathPrefix {
-				targetBackend = b
-				break
-			}
+	var matchedApp string
+	var matchedPrefix string
+	for appName, backends := range g.backends {
+		if len(backends) == 0 {
+			continue
 		}
-		if targetBackend != nil {
-			break
+		prefix := backends[0].PathPrefix
+		if prefix != "" && matchPathPrefix(path, prefix) {
+			if len(prefix) > len(matchedPrefix) {
+				matchedPrefix = prefix
+				matchedApp = appName
+			}
 		}
 	}
 
-	// If no path prefix match, use first available backend
-	if targetBackend == nil {
-		for _, backends := range g.backends {
+	if matchedApp == "" {
+		for appName, backends := range g.backends {
 			if len(backends) > 0 {
-				targetBackend = backends[0]
+				matchedApp = appName
 				break
 			}
+		}
+	}
+
+	var targetBackend *Backend
+	if matchedApp != "" {
+		appBackends := g.backends[matchedApp]
+		if len(appBackends) > 0 {
+			idx := g.rrCursor[matchedApp] % len(appBackends)
+			targetBackend = appBackends[idx]
+			g.rrCursor[matchedApp] = (idx + 1) % len(appBackends)
 		}
 	}
 
@@ -160,7 +174,21 @@ func (g *Gateway) UpdateBackends(backends map[string][]*Backend) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.backends = backends
+	g.rrCursor = map[string]int{}
 	logs.Infof("Gateway backends updated")
+}
+
+func matchPathPrefix(path, prefix string) bool {
+	if prefix == "" || path == "" {
+		return false
+	}
+	if path == prefix {
+		return true
+	}
+	if strings.HasPrefix(path, prefix+"/") {
+		return true
+	}
+	return false
 }
 
 // GenerateBackends generates backend URLs based on app configuration
@@ -168,7 +196,7 @@ func GenerateBackends(apps []config.AppConfig) map[string][]*Backend {
 	backends := make(map[string][]*Backend)
 
 	for _, app := range apps {
-		if app.WebApp == nil {
+		if len(app.GatewayBackends) == 0 {
 			continue
 		}
 
@@ -182,24 +210,29 @@ func GenerateBackends(apps []config.AppConfig) map[string][]*Backend {
 			replicaCount = *app.ReplicaPolicy.MaxReplicas
 		}
 
-		basePort := app.WebApp.Port
-		pathPrefix := app.WebApp.PathPrefix
-		if pathPrefix == "" {
-			pathPrefix = "/" + app.Name
-		}
-
-		for i := 0; i < replicaCount; i++ {
-			port := basePort + i
-			backend := &Backend{
-				URL:        fmt.Sprintf("http://localhost:%d", port),
-				AppName:    app.Name,
-				ReplicaIdx: i,
-				PathPrefix: pathPrefix,
+		for _, rule := range app.GatewayBackends {
+			pathPrefix := strings.TrimSpace(rule.PathPrefix)
+			backendTpl := strings.TrimSpace(rule.Backend)
+			if pathPrefix == "" || backendTpl == "" {
+				continue
 			}
-			backends[app.Name] = append(backends[app.Name], backend)
+
+			groupKey := fmt.Sprintf("%s|%s", app.Name, pathPrefix)
+			for i := 0; i < replicaCount; i++ {
+				backendURL := strings.ReplaceAll(backendTpl, "{{index}}", fmt.Sprintf("%d", i))
+				if !strings.HasPrefix(backendURL, "http://") && !strings.HasPrefix(backendURL, "https://") {
+					backendURL = "http://" + backendURL
+				}
+				backends[groupKey] = append(backends[groupKey], &Backend{
+					URL:        backendURL,
+					AppName:    app.Name,
+					ReplicaIdx: i,
+					PathPrefix: pathPrefix,
+				})
+			}
 		}
 
-		logs.Infof("Generated %d backends for app %s with base port %d", replicaCount, app.Name, basePort)
+		logs.Infof("Generated gateway backends for app %s with replica count %d", app.Name, replicaCount)
 	}
 
 	return backends

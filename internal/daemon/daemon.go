@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/deeprpa/fuck-gpu/config"
 	"github.com/deeprpa/fuck-gpu/internal/gateway"
@@ -36,7 +38,7 @@ type EnvStatus struct {
 // NewDaemon Create a new daemon instance
 func NewDaemon(lc *lifecycle.LifeCycle, cfg *config.MainConfig) (*Daemon, error) {
 	d := &Daemon{
-		ctx:  logs.WithContextFields(lc.Context(), "module", "daemon"),
+		ctx:  logs.WithContextFields(lc.Context()),
 		cfg:  cfg,
 		lc:   lc,
 		apps: map[string]*AppReplicaController{},
@@ -44,9 +46,8 @@ func NewDaemon(lc *lifecycle.LifeCycle, cfg *config.MainConfig) (*Daemon, error)
 
 	// Initialize Gateway if enabled
 	if cfg.Gateway.Enable {
-		backends := gateway.GenerateBackends(cfg.Apps)
-		d.Gateway = gateway.NewGateway(d.ctx, &cfg.Gateway, backends)
-		logs.InfoContextf(d.ctx, "Gateway initialized with %d apps", len(backends))
+		d.Gateway = gateway.NewGateway(d.ctx, &cfg.Gateway, map[string][]*gateway.Backend{})
+		logs.InfoContextf(d.ctx, "Gateway initialized")
 	}
 
 	return d, nil
@@ -63,8 +64,8 @@ func (d *Daemon) Run() error {
 		return err
 	}
 
-	for _, app := range d.apps {
-		app.Start()
+	if d.Gateway != nil {
+		d.Gateway.UpdateBackends(d.buildGatewayBackends())
 	}
 
 	// Start Gateway if enabled
@@ -135,7 +136,11 @@ func (d *Daemon) schedule() error {
 	needScheApps := map[string]struct{}{}
 	// 处理Static副本数的应用
 	for _, appCfg := range d.cfg.Apps {
-		logs.DebugContextf(d.ctx, "Processing app: %s, static replicas: %v", appCfg.Name, *appCfg.ReplicaPolicy.Static)
+		var staticReplicas interface{} = nil
+		if appCfg.ReplicaPolicy.Static != nil {
+			staticReplicas = *appCfg.ReplicaPolicy.Static
+		}
+		logs.DebugContextf(d.ctx, "Processing app: %s, static replicas: %v", appCfg.Name, staticReplicas)
 		if appCfg.ReplicaPolicy.Static != nil && *appCfg.ReplicaPolicy.Static > 0 {
 			logs.InfoContextf(d.ctx, "Creating %d static replicas for app: %s", *appCfg.ReplicaPolicy.Static, appCfg.Name)
 			app, err := NewAppReplicaController(d.ctx, appCfg, *appCfg.ReplicaPolicy.Static)
@@ -292,4 +297,53 @@ func (d *Daemon) Status() *DaemonStatus {
 // Schedule 调度
 func (d *Daemon) Schedule() error {
 	return nil
+}
+
+func (d *Daemon) buildGatewayBackends() map[string][]*gateway.Backend {
+	backends := map[string][]*gateway.Backend{}
+
+	for appName, controller := range d.apps {
+		if controller == nil || len(controller.appCfg.GatewayBackends) == 0 {
+			continue
+		}
+
+		replicaCount := len(controller.cmds)
+		if replicaCount == 0 {
+			continue
+		}
+
+		for _, rule := range controller.appCfg.GatewayBackends {
+			pathPrefix := strings.TrimSpace(rule.PathPrefix)
+			backendTpl := strings.TrimSpace(rule.Backend)
+			if pathPrefix == "" || backendTpl == "" {
+				logs.WarnContextf(d.ctx, "skip invalid gateway backend rule for app %s, path_prefix=%q, backend=%q", appName, rule.PathPrefix, rule.Backend)
+				continue
+			}
+
+			groupKey := fmt.Sprintf("%s|%s", appName, pathPrefix)
+			for i := 0; i < replicaCount; i++ {
+				backendAddr := applyGatewayBackendTemplate(backendTpl, i)
+				backends[groupKey] = append(backends[groupKey], &gateway.Backend{
+					URL:        normalizeGatewayBackendURL(backendAddr),
+					AppName:    appName,
+					ReplicaIdx: i,
+					PathPrefix: pathPrefix,
+				})
+			}
+		}
+	}
+
+	return backends
+}
+
+func applyGatewayBackendTemplate(backend string, idx int) string {
+	return strings.ReplaceAll(backend, "{{index}}", fmt.Sprintf("%d", idx))
+}
+
+func normalizeGatewayBackendURL(backend string) string {
+	trimmed := strings.TrimSpace(backend)
+	if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
+		return trimmed
+	}
+	return "http://" + trimmed
 }
