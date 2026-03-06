@@ -45,7 +45,7 @@ apps:
     - path_prefix: "/qwen3"
       backend: "127.0.0.1:808{{index}}"
 
-- name: example-app
+- name: echo-app
   command:
     workdir: ./
     command: "echo"
@@ -54,7 +54,6 @@ apps:
     envs: []
   restart:
     max_retries: 0
-    interval: 0
   replica:
     static: 3
     require:

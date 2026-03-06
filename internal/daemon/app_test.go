@@ -1,11 +1,13 @@
 package daemon
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/deeprpa/fuck-gpu/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func intPtr(i int) *int {
@@ -17,100 +19,103 @@ func TestNewAppReplicaController(t *testing.T) {
 		Name: "test-app",
 		Command: config.CommandConfig{
 			Command: "sleep",
-			Args:    []string{"1"},
+			Args:    []string{"2"},
 		},
 		ReplicaPolicy: config.ReplicaPolicy{
 			Static: intPtr(2),
 		},
 	}
 
-	app, err := NewAppReplicaController(nil, cfg, 2)
+	app, err := NewAppReplicaController(context.TODO(), cfg, 2)
 	assert.NoError(t, err)
 	assert.NotNil(t, app)
 	assert.Len(t, app.cmds, 2)
+	app.Stop()
 }
 
 func TestAppReplicaController_TemplateSupport(t *testing.T) {
 	cfg := config.AppConfig{
 		Name: "test-app",
 		Command: config.CommandConfig{
-			Command: "server",
-			Args:    []string{"--port={{index}}", "--name=test_{{index}}"},
+			Command: "echo",
+			Args:    []string{"instance={{index}}"},
 		},
 		ReplicaPolicy: config.ReplicaPolicy{
 			Static: intPtr(2),
 		},
 	}
 
-	app, err := NewAppReplicaController(nil, cfg, 2)
+	app, err := NewAppReplicaController(context.TODO(), cfg, 2)
 	assert.NoError(t, err)
 	assert.NotNil(t, app)
 	assert.Len(t, app.cmds, 2)
-
-	// Test that commands were created (but we can't directly verify the command processing without integration test)
-	// Testing the functionality would require mocking or integration testing
-}
-
-func TestAppReplicaController_Start(t *testing.T) {
-	cfg := config.AppConfig{
-		Name: "test-app",
-		Command: config.CommandConfig{
-			Command: "sleep",
-			Args:    []string{"1"},
-		},
-		ReplicaPolicy: config.ReplicaPolicy{
-			Static: intPtr(1),
-		},
-	}
-
-	app, err := NewAppReplicaController(nil, cfg, 1)
-	assert.NoError(t, err)
-	assert.NotNil(t, app)
-
-	// Test start (just make sure it doesn't panic)
-	app.Start()
-
-	// Give it a moment to start
-	time.Sleep(10 * time.Millisecond)
-}
-
-func TestAppReplicaController_Stop(t *testing.T) {
-	cfg := config.AppConfig{
-		Name: "test-app",
-		Command: config.CommandConfig{
-			Command: "sleep",
-			Args:    []string{"1"},
-		},
-		ReplicaPolicy: config.ReplicaPolicy{
-			Static: intPtr(1),
-		},
-	}
-
-	app, err := NewAppReplicaController(nil, cfg, 1)
-	assert.NoError(t, err)
-	assert.NotNil(t, app)
-
-	// Test stop (just make sure it doesn't panic)
+	require.Equal(t, "instance=0", app.cmds[0].cmd.Args[1])
+	require.Equal(t, "instance=1", app.cmds[1].cmd.Args[1])
 	app.Stop()
 }
 
-func TestAppReplicaController_Restart(t *testing.T) {
+func TestAppReplicaController_StartStopLifecycle(t *testing.T) {
 	cfg := config.AppConfig{
 		Name: "test-app",
 		Command: config.CommandConfig{
 			Command: "sleep",
-			Args:    []string{"1"},
+			Args:    []string{"2"},
+		},
+		ReplicaPolicy: config.ReplicaPolicy{
+			Static: intPtr(2),
+		},
+	}
+
+	app, err := NewAppReplicaController(context.TODO(), cfg, 2)
+	require.NoError(t, err)
+	app.Start()
+
+	for _, cmd := range app.cmds {
+		require.Eventually(t, func() bool {
+			return cmd.cmd != nil && cmd.cmd.Process != nil && cmd.cmd.ProcessState == nil
+		}, 500*time.Millisecond, 20*time.Millisecond)
+	}
+
+	app.Stop()
+	for _, cmd := range app.cmds {
+		require.Eventually(t, func() bool {
+			select {
+			case <-cmd.chExitRoutine:
+				return true
+			default:
+				return false
+			}
+		}, 500*time.Millisecond, 20*time.Millisecond)
+	}
+}
+
+func TestAppReplicaController_RestartLifecycle(t *testing.T) {
+	cfg := config.AppConfig{
+		Name: "test-app",
+		Command: config.CommandConfig{
+			Command: "sleep",
+			Args:    []string{"2"},
 		},
 		ReplicaPolicy: config.ReplicaPolicy{
 			Static: intPtr(1),
 		},
 	}
 
-	app, err := NewAppReplicaController(nil, cfg, 1)
-	assert.NoError(t, err)
-	assert.NotNil(t, app)
+	app, err := NewAppReplicaController(context.TODO(), cfg, 1)
+	require.NoError(t, err)
+	app.Start()
 
-	// Test restart (just make sure it doesn't panic)
-	err = app.Restart()
-	assert.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return app.cmds[0].cmd != nil && app.cmds[0].cmd.Process != nil && app.cmds[0].cmd.ProcessState == nil
+	}, 500*time.Millisecond, 20*time.Millisecond)
+	oldPID := app.cmds[0].cmd.Process.Pid
+
+	require.NoError(t, app.Restart())
+	require.Eventually(t, func() bool {
+		return app.cmds[0].cmd != nil && app.cmds[0].cmd.Process != nil && app.cmds[0].cmd.ProcessState == nil
+	}, 500*time.Millisecond, 20*time.Millisecond)
+	newPID := app.cmds[0].cmd.Process.Pid
+	assert.NotEqual(t, oldPID, newPID)
+
+	app.Stop()
 }

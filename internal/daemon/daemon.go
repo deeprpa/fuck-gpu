@@ -170,6 +170,11 @@ func (d *Daemon) schedule() error {
 		freeSize := d.InitStatus.Resource.GPUMemory
 	LOOP:
 		for {
+			if len(needScheApps) == 0 {
+				break
+			}
+
+			progress := false
 			for _, appCfg := range d.cfg.Apps {
 				if _, ok := needScheApps[appCfg.Name]; !ok {
 					continue
@@ -185,6 +190,7 @@ func (d *Daemon) schedule() error {
 						if repPol.MaxReplicas != nil {
 							if dynamicPlan[appCfg.Name] >= *repPol.MaxReplicas {
 								delete(needScheApps, appCfg.Name)
+								progress = true
 								continue
 							}
 						}
@@ -195,11 +201,21 @@ func (d *Daemon) schedule() error {
 						break LOOP
 					}
 					dynamicPlan[appCfg.Name]++
+					progress = true
 					logs.InfoContextf(d.ctx, "Scheduled %d instances for app %s (free: %v)", dynamicPlan[appCfg.Name], appCfg.Name, freeSize)
 					if len(needScheApps) == 0 {
 						break LOOP
 					}
+				} else {
+					// Dynamic scheduling without resource requirements would otherwise loop forever.
+					delete(needScheApps, appCfg.Name)
+					progress = true
+					logs.WarnContextf(d.ctx, "skip dynamic scheduling for app %s because replica.require.gpu_memory is not set", appCfg.Name)
 				}
+			}
+
+			if !progress {
+				break
 			}
 		}
 	}
