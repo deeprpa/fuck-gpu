@@ -1,7 +1,7 @@
 logger:
   default:
   - writer: console
-    level: debug
+    level: info
   - writer: file
     level: debug
     filename: ./logs/default.log
@@ -23,16 +23,16 @@ apps:
 - name: llm-qwen3
   command:
     workdir: ./
-    command: "python"
+    command: "python3"
     args:
     - "-m"
     - "http.server"
-    - "808{{index}}"
+    - "809{{index}}"
     envs:
     - key: APP_NAME
       value: qwen3_{{index}}
     - key: PORT
-      value: "808{{index}}"
+      value: "809{{index}}"
   restart:
     max_retries: 3
     interval: 5s
@@ -43,18 +43,18 @@ apps:
     min_replicas: 1
   gateway_backends:
     - path_prefix: "/qwen3"
-      backend: "127.0.0.1:808{{index}}"
+      backend: "127.0.0.1:809{{index}}"
 
-- name: echo-app
-  command:
-    workdir: ./
-    command: "echo"
-    args:
-    - "Instance {{index}} started on port 909{{index}}"
-    envs: []
-  restart:
-    max_retries: 0
-  replica:
-    static: 3
-    require:
-      gpu_memory: 0
+# - name: echo-app
+#   command:
+#     workdir: ./
+#     command: "echo"
+#     args:
+#     - "Instance {{index}} started on port 909{{index}}"
+#     envs: []
+#   restart:
+#     max_retries: 0
+#   replica:
+#     static: 3
+#     require:
+#       gpu_memory: 0

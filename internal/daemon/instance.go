@@ -33,11 +33,13 @@ type RuntimeInstance struct {
 	localVer *semver.Version
 
 	chExitRoutine chan struct{}
-	retryTimes    time.Duration
+	retryTimes    int
 	isRestarting  bool
 	isStarted     bool
 	logOutput     *prefixedLineWriter
 }
+
+const defaultRestartInterval = 5 * time.Second
 
 type prefixedLineWriter struct {
 	prefix string
@@ -110,9 +112,6 @@ func (c *RuntimeInstance) checkProcessStatus() {
 
 			if c.cmd.ProcessState == nil {
 				if c.cmd.Process != nil {
-					if c.retryTimes > 1 {
-						c.retryTimes = 1
-					}
 					logs.DebugContextf(c.ctx, "command(%v) status RUNING", c.cmd.Process.Pid)
 				} else {
 					logs.DebugContextf(c.ctx, "command status UNKNOWN")
@@ -177,7 +176,13 @@ func (c *RuntimeInstance) restart() error {
 	c.isRestarting = true
 	defer func() { c.isRestarting = false }()
 
-	waitTime := time.Second * c.retryTimes * 2
+	if !c.canRestart() {
+		logs.WarnContextf(c.ctx, "restart skipped, max retries reached: %d", c.maxRetriesOrUnlimited())
+		_ = c.Exit()
+		return nil
+	}
+
+	waitTime := c.restartInterval()
 	logs.InfoContextf(c.ctx, "restarting later %s", waitTime)
 	time.Sleep(waitTime)
 	if c.cmd.Process != nil {
@@ -196,6 +201,27 @@ func (c *RuntimeInstance) restart() error {
 	go c.waitProcessExit()
 	logs.DebugContextf(c.ctx, "restarting, ", c.cmd.Process.Pid)
 	return nil
+}
+
+func (c *RuntimeInstance) restartInterval() time.Duration {
+	if c.cfg.RestartPolicy.Interval == nil {
+		return defaultRestartInterval
+	}
+	return *c.cfg.RestartPolicy.Interval
+}
+
+func (c *RuntimeInstance) canRestart() bool {
+	if c.cfg.RestartPolicy.MaxRetries == nil {
+		return true
+	}
+	return c.retryTimes < *c.cfg.RestartPolicy.MaxRetries
+}
+
+func (c *RuntimeInstance) maxRetriesOrUnlimited() int {
+	if c.cfg.RestartPolicy.MaxRetries == nil {
+		return -1
+	}
+	return *c.cfg.RestartPolicy.MaxRetries
 }
 
 func (c *RuntimeInstance) waitProcessExit() {
