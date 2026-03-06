@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -109,7 +111,6 @@ func (g *Gateway) proxyRequest(c *gin.Context) {
 	path := c.Request.URL.Path
 
 	g.mu.Lock()
-	defer g.mu.Unlock()
 
 	// Try to find matching backend by path prefix
 	var matchedApp string
@@ -147,9 +148,11 @@ func (g *Gateway) proxyRequest(c *gin.Context) {
 	}
 
 	if targetBackend == nil {
+		g.mu.Unlock()
 		c.JSON(http.StatusBadGateway, gin.H{"error": "no backend available"})
 		return
 	}
+	g.mu.Unlock()
 
 	// Forward request to backend
 	targetURL := targetBackend.URL + path
@@ -158,9 +161,26 @@ func (g *Gateway) proxyRequest(c *gin.Context) {
 	}
 
 	logs.Debugf("Proxying %s %s to %s", c.Request.Method, path, targetURL)
+	target, err := url.Parse(targetBackend.URL)
+	if err != nil {
+		logs.Errorf("invalid backend url %s: %v", targetBackend.URL, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "invalid backend url"})
+		return
+	}
 
-	// Simple proxy - just redirect to the backend
-	c.Redirect(http.StatusFound, targetURL)
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, proxyErr error) {
+		logs.Errorf("proxy request failed, backend=%s, err=%v", targetBackend.URL, proxyErr)
+		rw.WriteHeader(http.StatusBadGateway)
+	}
+
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalDirector(req)
+		req.Host = target.Host
+	}
+
+	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
 func (g *Gateway) Stop() error {
