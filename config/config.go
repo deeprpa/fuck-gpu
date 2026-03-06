@@ -69,7 +69,7 @@ type ReplicaPolicy struct {
 
 type RestartPolicy struct {
 	// MaxRetries 最大重试次数，-1表示无限制
-	MaxRetries int `yaml:"max_retries"`
+	MaxRetries *int `yaml:"max_retries"`
 	// Interval 重试间隔
 	Interval *time.Duration `yaml:"interval,omitempty"`
 }

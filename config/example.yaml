@@ -34,7 +34,7 @@ apps:
     - key: PORT
       value: "809{{index}}"
   restart:
-    max_retries: 3
+    # max_retries: 3
     interval: 5s
   replica:
     require:
