@@ -43,6 +43,9 @@ func NewDaemon(lc *lifecycle.LifeCycle, cfg *config.MainConfig) (*Daemon, error)
 		lc:   lc,
 		apps: map[string]*AppReplicaController{},
 	}
+	if lc != nil {
+		lc.AddCloser(d)
+	}
 
 	// Initialize Gateway if enabled
 	if cfg.Gateway.Enable {
@@ -51,6 +54,24 @@ func NewDaemon(lc *lifecycle.LifeCycle, cfg *config.MainConfig) (*Daemon, error)
 	}
 
 	return d, nil
+}
+
+// Close stops all managed components and is wired into lifecycle shutdown.
+func (d *Daemon) Close() error {
+	for _, app := range d.apps {
+		if app == nil {
+			continue
+		}
+		app.Stop()
+	}
+
+	if d.Gateway != nil {
+		if err := d.Gateway.Stop(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (d *Daemon) Run() error {

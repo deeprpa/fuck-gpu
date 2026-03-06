@@ -168,6 +168,50 @@ func TestDaemonRun_InitializesAppsAndGateway(t *testing.T) {
 	}, 500*time.Millisecond, 20*time.Millisecond)
 }
 
+func TestDaemonClose_StopsManagedProcesses(t *testing.T) {
+	cfg := &config.MainConfig{
+		Global: config.GlobalConfig{
+			AllocatableResource: &config.Resource{GPUMemory: config.NewMemorySize("4G")},
+		},
+		Apps: []config.AppConfig{
+			{
+				Name: "close-check-app",
+				Command: config.CommandConfig{
+					Command: "sleep",
+					Args:    []string{"5"},
+				},
+				ReplicaPolicy: config.ReplicaPolicy{
+					Static: intPtr(1),
+				},
+			},
+		},
+	}
+
+	lc := lifecycle.New()
+	d, err := NewDaemon(lc, cfg)
+	require.NoError(t, err)
+	require.NoError(t, d.Run())
+
+	app := d.apps["close-check-app"]
+	require.NotNil(t, app)
+	require.Len(t, app.cmds, 1)
+
+	cmd := app.cmds[0]
+	require.Eventually(t, func() bool {
+		return cmd.cmd != nil && cmd.cmd.Process != nil && cmd.cmd.ProcessState == nil
+	}, 500*time.Millisecond, 20*time.Millisecond)
+
+	require.NoError(t, d.Close())
+	require.Eventually(t, func() bool {
+		select {
+		case <-cmd.chExitRoutine:
+			return true
+		default:
+			return false
+		}
+	}, 500*time.Millisecond, 20*time.Millisecond)
+}
+
 func stopAllDaemonApps(d *Daemon) {
 	for _, app := range d.apps {
 		if app != nil {
