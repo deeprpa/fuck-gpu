@@ -40,7 +40,7 @@
 logger:
   default:
   - writer: console
-    level: debug
+    level: info
   - writer: file
     level: debug
     filename: ./logs/default.log
@@ -50,34 +50,60 @@ logger:
     localtime: true
     compress: true
 
+gateway:
+  enable: true
+  listen_addr: ":8080"
+
 global:
-  # 可选：手动指定可分配资源
-  # allocatable:
-  #   gpu_memory: 16G
+  allocatable:
+    gpu_memory: 16G
 
 apps:
 - name: llm-qwen3
   command:
     workdir: ./
-    command: "sleep"
+    command: "python3"
     args:
-    - "1{{index}}"
+    - "-m"
+    - "http.server"
+    - "809{{index}}"
     envs:
     - key: APP_NAME
-      value: sleep_{{index}}
+      value: qwen3_{{index}}
+    - key: PORT
+      value: "809{{index}}"
   restart:
-    max_retries: 3
-    interval: 5
+    # max_retries: 3
+    interval: 5s
   replica:
-    # 静态副本数，设置为0表示自动调度
-    static: 0
-    # 需要的GPU内存
     require:
       gpu_memory: 4G
-    # 最大副本数
     max_replicas: 2
-    # 最小副本数
     min_replicas: 1
+  gateway_backends:
+    - path_prefix: "/qwen3"
+      backend: "127.0.0.1:809{{index}}"
+      health_check:
+        path: "/health"
+        interval: 2s
+        timeout: 1s
+        healthy_threshold: 1
+        unhealthy_threshold: 1
+
+# - name: echo-app
+#   command:
+#     workdir: ./
+#     command: "echo"
+#     args:
+#     - "Instance {{index}} started on port 909{{index}}"
+#     envs: []
+#   restart:
+#     max_retries: 0
+#   replica:
+#     static: 3
+#     require:
+#       gpu_memory: 0
+
 ```
 
 ## API 接口
