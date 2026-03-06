@@ -1,11 +1,14 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Masterminds/semver"
@@ -33,6 +36,59 @@ type RuntimeInstance struct {
 	retryTimes    time.Duration
 	isRestarting  bool
 	isStarted     bool
+	logOutput     *prefixedLineWriter
+}
+
+type prefixedLineWriter struct {
+	prefix string
+	output io.Writer
+
+	mu     sync.Mutex
+	buffer bytes.Buffer
+}
+
+func newPrefixedLineWriter(output io.Writer, prefix string) *prefixedLineWriter {
+	return &prefixedLineWriter{output: output, prefix: prefix}
+}
+
+func (w *prefixedLineWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if _, err := w.buffer.Write(p); err != nil {
+		return 0, err
+	}
+
+	for {
+		data := w.buffer.Bytes()
+		idx := bytes.IndexByte(data, '\n')
+		if idx < 0 {
+			break
+		}
+
+		line := string(data[:idx])
+		if _, err := fmt.Fprintf(w.output, "%s | %s\n", w.prefix, line); err != nil {
+			return 0, err
+		}
+
+		w.buffer.Next(idx + 1)
+	}
+
+	return len(p), nil
+}
+
+func (w *prefixedLineWriter) Flush() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.buffer.Len() == 0 {
+		return nil
+	}
+
+	line := w.buffer.String()
+	w.buffer.Reset()
+	_, err := fmt.Fprintf(w.output, "%s | %s\n", w.prefix, line)
+	return err
 }
 
 func (c *RuntimeInstance) checkProcessStatus() {
@@ -143,6 +199,12 @@ func (c *RuntimeInstance) restart() error {
 }
 
 func (c *RuntimeInstance) waitProcessExit() {
+	defer func() {
+		if c.logOutput != nil {
+			_ = c.logOutput.Flush()
+		}
+	}()
+
 	err := c.cmd.Wait()
 	if err != nil && c.errExit != nil {
 		c.errExit <- err
@@ -197,6 +259,9 @@ func (c *RuntimeInstance) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, er
 	logs.DebugContextf(c.ctx, "Creating command with: %s %v", cmdStr, args)
 
 	cmd := exec.Command(cmdStr, args...)
+	logPrefix := fmt.Sprintf("%s-%d", c.AppName, c.Index)
+	lineWriter := newPrefixedLineWriter(os.Stdout, logPrefix)
+	c.logOutput = lineWriter
 	if cmdCfg.WorkDir != "" {
 		cmd.Dir = cmdCfg.WorkDir
 	}
@@ -210,8 +275,8 @@ func (c *RuntimeInstance) getCommand(cmdCfg config.CommandConfig) (*exec.Cmd, er
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", env.Key, envValue))
 		}
 	}
-	cmd.Stderr = os.Stdout
-	cmd.Stdout = os.Stdout
+	cmd.Stderr = lineWriter
+	cmd.Stdout = lineWriter
 	return cmd, nil
 }
 
@@ -238,5 +303,4 @@ func (c *RuntimeInstance) waitProcess(pid int) {
 		logs.ErrorContextf(c.ctx, "wait exit failed, %s, %v", err, st)
 	}
 	logs.ErrorContextf(c.ctx, "exit %v", st)
-	return
 }
